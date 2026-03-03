@@ -1,0 +1,113 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@300;400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-deep: #000000;
+  --bg-mid: #040210;
+  --bg-near: #0a051a;
+  --blue: #4466ff;
+  --purple: #9933ff;
+  --gold: #f5c842;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  height: 100%;
+  width: 100%;
+  background: #000;
+}
+
+/* Scanning line effect — gives Zordon energy-field look */
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+.scanline {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    rgba(68, 102, 255, 0.15),
+    transparent
+  );
+  animation: scanline 6s linear infinite;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Noise texture overlay for a cinematic look */
+.noise::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 5;
+  opacity: 0.4;
+}
+
+/* Pulsing glow ring for status states */
+@keyframes ring-pulse {
+  0%, 100% { opacity: 0.2; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.05); }
+}
+
+.ring-listening {
+  animation: ring-pulse 1s ease-in-out infinite;
+  border-color: #4466ff;
+  box-shadow: 0 0 20px #4466ff44, 0 0 60px #4466ff22;
+}
+
+.ring-thinking {
+  animation: ring-pulse 1.5s ease-in-out infinite;
+  border-color: #9933ff;
+  box-shadow: 0 0 20px #9933ff44, 0 0 60px #9933ff22;
+}
+
+.ring-speaking {
+  animation: ring-pulse 0.7s ease-in-out infinite;
+  border-color: #f5c842;
+  box-shadow: 0 0 20px #f5c84244, 0 0 60px #f5c84222;
+}
+
+/* Transcript fade-in */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-up {
+  animation: fadeUp 0.4s ease-out forwards;
+}
+
+/* Scrollable chat history */
+.chat-history::-webkit-scrollbar {
+  width: 4px;
+}
+.chat-history::-webkit-scrollbar-track {
+  background: transparent;
+}
+.chat-history::-webkit-scrollbar-thumb {
+  background: #4466ff44;
+  border-radius: 2px;
+}
+
+/* Canvas cursor */
+canvas {
+  cursor: pointer;
+}
