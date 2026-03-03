@@ -34,10 +34,32 @@ const RING_CLASS: Record<Status, string> = {
 
 // ─── Web Speech API type shim (not in lib.dom by default) ───────────────────
 
+interface SpeechRecognitionErrorEvent extends Event {
+  error: string
+}
+
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean
+  interimResults: boolean
+  lang: string
+  maxAlternatives: number
+  start(): void
+  stop(): void
+  onstart: (() => void) | null
+  onresult: ((event: SpeechRecognitionEvent) => void) | null
+  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null
+  onend: (() => void) | null
+}
+
+interface SpeechRecognitionEvent extends Event {
+  resultIndex: number
+  results: SpeechRecognitionResultList
+}
+
 declare global {
   interface Window {
-    SpeechRecognition: typeof SpeechRecognition
-    webkitSpeechRecognition: typeof SpeechRecognition
+    SpeechRecognition: new () => SpeechRecognition
+    webkitSpeechRecognition: new () => SpeechRecognition
   }
 }
 
@@ -55,7 +77,7 @@ export function LexBot() {
   const statusRef = useRef<Status>('idle')
   const isSpeakingRef = useRef(false)
   const audioCtxRef = useRef<AudioContext | null>(null)
-  const recognitionRef = useRef<InstanceType<typeof SpeechRecognition> | null>(null)
+  const recognitionRef = useRef<SpeechRecognition | null>(null)
   const messagesRef = useRef<Message[]>([])
   const chatEndRef = useRef<HTMLDivElement>(null)
 
