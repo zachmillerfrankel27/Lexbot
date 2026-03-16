@@ -166,6 +166,12 @@ export function LexBot() {
   // ── TTS + lip sync ─────────────────────────────────────────────────────────
 
   const speak = useCallback(async (text: string) => {
+    // Stop any active recognition before speaking to prevent echo
+    if (recognitionRef.current) {
+      recognitionRef.current.stop()
+      recognitionRef.current = null
+    }
+
     setStatus('speaking')
     setLastResponse(text)
     isSpeakingRef.current = true
@@ -219,6 +225,8 @@ export function LexBot() {
           source.start()
           animate()
         })
+        // Brief pause so room echo clears before mic opens
+        await new Promise((r) => setTimeout(r, 400))
         return
       } else {
         const errText = await res.text()
@@ -265,6 +273,8 @@ export function LexBot() {
       utterance.onerror = done
       window.speechSynthesis.speak(utterance)
     })
+    // Brief pause so room echo clears before mic opens
+    await new Promise((r) => setTimeout(r, 400))
   }, [])
 
   // ── Send message to Claude ─────────────────────────────────────────────────
