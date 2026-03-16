@@ -244,20 +244,25 @@ export function LexBot() {
     }
 
     await new Promise<void>((resolve) => {
-      utterance.onend = () => {
+      // Chrome has a known bug where onend never fires — use a timeout as a fallback
+      const fallback = setTimeout(() => {
+        clearInterval(lipInterval)
+        isSpeakingRef.current = false
+        setAudioAmplitude(0)
+        setStatus('idle')
+        resolve()
+      }, Math.max(3000, text.length * 65))
+
+      const done = () => {
+        clearTimeout(fallback)
         clearInterval(lipInterval)
         isSpeakingRef.current = false
         setAudioAmplitude(0)
         setStatus('idle')
         resolve()
       }
-      utterance.onerror = () => {
-        clearInterval(lipInterval)
-        isSpeakingRef.current = false
-        setAudioAmplitude(0)
-        setStatus('idle')
-        resolve()
-      }
+      utterance.onend = done
+      utterance.onerror = done
       window.speechSynthesis.speak(utterance)
     })
   }, [])
