@@ -136,6 +136,7 @@ export function LexBot() {
   const startListeningRef = useRef<() => void>(() => {})
   const handleModeDetectionRef = useRef<(transcript: string) => void>(() => {})
   const isSpeakingRef = useRef(false)
+  const speakLockRef = useRef(false)
   const audioCtxRef = useRef<AudioContext | null>(null)
   const recognitionRef = useRef<SpeechRecognition | null>(null)
   const messagesRef = useRef<Message[]>([])
@@ -166,6 +167,10 @@ export function LexBot() {
   // ── TTS + lip sync ─────────────────────────────────────────────────────────
 
   const speak = useCallback(async (text: string) => {
+    // Prevent concurrent speak calls (causes multi-voice echo)
+    if (speakLockRef.current) return
+    speakLockRef.current = true
+
     // Stop any active recognition before speaking to prevent echo
     if (recognitionRef.current) {
       recognitionRef.current.stop()
@@ -227,10 +232,12 @@ export function LexBot() {
         })
         // Brief pause so room echo clears before mic opens
         await new Promise((r) => setTimeout(r, 400))
+        speakLockRef.current = false
         return
       } else {
         const errText = await res.text()
         console.warn('ElevenLabs TTS error:', res.status, errText)
+        speakLockRef.current = false
       }
     } catch (err) {
       console.warn('ElevenLabs TTS failed, falling back to browser speech:', err)
@@ -275,6 +282,7 @@ export function LexBot() {
     })
     // Brief pause so room echo clears before mic opens
     await new Promise((r) => setTimeout(r, 400))
+    speakLockRef.current = false
   }, [])
 
   // ── Send message to Claude ─────────────────────────────────────────────────
