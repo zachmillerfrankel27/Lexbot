@@ -11,8 +11,12 @@ const UNLOCK_PATH = '/unlock'
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
-  // Always allow the unlock page and its API handler
-  if (pathname.startsWith(UNLOCK_PATH) || pathname.startsWith('/api/unlock')) {
+  // Always allow the unlock page, privacy policy, and their API handlers
+  if (
+    pathname.startsWith(UNLOCK_PATH) ||
+    pathname.startsWith('/api/unlock') ||
+    pathname.startsWith('/privacy')
+  ) {
     return NextResponse.next()
   }
 
