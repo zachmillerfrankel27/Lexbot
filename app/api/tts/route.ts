@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         text,
-        model_id: 'eleven_turbo_v2_5', // fastest ElevenLabs model
+        model_id: 'eleven_monolingual_v1', // available on all tiers including free
         voice_settings: {
           stability: 0.45,
           similarity_boost: 0.75,
