@@ -134,6 +134,7 @@ export function LexBot() {
   const modeRef = useRef<Mode | null>(null)
   const appPhaseRef = useRef<AppPhase>('active')
   const startListeningRef = useRef<() => void>(() => {})
+  const handleModeDetectionRef = useRef<(transcript: string) => void>(() => {})
   const isSpeakingRef = useRef(false)
   const audioCtxRef = useRef<AudioContext | null>(null)
   const recognitionRef = useRef<SpeechRecognition | null>(null)
@@ -295,7 +296,7 @@ export function LexBot() {
 
   // ── Voice recognition ──────────────────────────────────────────────────────
 
-  const handleVoiceResult = useCallback(
+  const handleVoiceResult: (transcript: string) => void = useCallback(
     (transcript: string) => {
       // ── Initialization phases ──────────────────────────────────────────────
       if (appPhaseRef.current === 'awaiting_name') {
@@ -312,7 +313,7 @@ export function LexBot() {
       }
 
       if (appPhaseRef.current === 'awaiting_mode') {
-        handleModeDetection(transcript)
+        handleModeDetectionRef.current(transcript)
         return
       }
 
@@ -331,7 +332,7 @@ export function LexBot() {
       handleUserMessage(transcript)
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [examStep, handleModeDetection, handleUserMessage]
+    [examStep, handleUserMessage]
   )
 
   const startListening = useCallback(() => {
@@ -446,6 +447,8 @@ export function LexBot() {
       setStatus('idle')
     }
   }, [selectMode, speak])
+
+  useEffect(() => { handleModeDetectionRef.current = handleModeDetection }, [handleModeDetection])
 
   // ── Exam Prep flow ─────────────────────────────────────────────────────────
 
