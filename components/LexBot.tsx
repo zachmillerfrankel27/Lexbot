@@ -237,7 +237,6 @@ export function LexBot() {
       } else {
         const errText = await res.text()
         console.warn('ElevenLabs TTS error:', res.status, errText)
-        speakLockRef.current = false
       }
     } catch (err) {
       console.warn('ElevenLabs TTS failed, falling back to browser speech:', err)
@@ -460,22 +459,33 @@ export function LexBot() {
 
   const handleModeDetection = useCallback(async (transcript: string) => {
     setStatus('thinking')
-    try {
+
+    const tryClassify = async () => {
       const res = await fetch('/api/classify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transcript }),
       })
-      if (!res.ok) throw new Error('classify failed')
-      const { mode: detectedMode, response: firstResponse } = await res.json()
+      if (!res.ok) throw new Error(`classify ${res.status}`)
+      return res.json()
+    }
+
+    try {
+      // Try once, retry once on failure
+      let result
+      try {
+        result = await tryClassify()
+      } catch {
+        await new Promise((r) => setTimeout(r, 800))
+        result = await tryClassify()
+      }
+      const { mode: detectedMode, response: firstResponse } = result
       selectMode(detectedMode as Mode, firstResponse)
     } catch {
-      // Network/API failure — fall back gracefully
-      speak("I had trouble with that. Could you say it again?")
-        .then(() => startListeningRef.current())
-      setStatus('idle')
+      // Both attempts failed — default to discussion and just start talking
+      selectMode('discussion', "Let's dive in. What's on your mind?")
     }
-  }, [selectMode, speak])
+  }, [selectMode])
 
   useEffect(() => { handleModeDetectionRef.current = handleModeDetection }, [handleModeDetection])
 
