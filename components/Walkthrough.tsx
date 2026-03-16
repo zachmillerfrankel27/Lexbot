@@ -101,7 +101,7 @@ export function Walkthrough({ onDone }: WalkthroughProps) {
         {/* Body or mode cards */}
         {'modes' in current ? (
           <div className="flex flex-col gap-3 w-full">
-            {current.modes.map((m) => (
+            {current.modes!.map((m) => (
               <div
                 key={m.name}
                 className="px-5 py-4 rounded-lg border border-gray-800 bg-gray-950"
