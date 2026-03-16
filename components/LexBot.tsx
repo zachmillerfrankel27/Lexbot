@@ -92,7 +92,15 @@ export function LexBot() {
   const [status, setStatus] = useState<Status>('idle')
   const [mode, setMode] = useState<Mode | null>(null)
   const [showModeSelector, setShowModeSelector] = useState(false)
-  const [messages, setMessages] = useState<Message[]>([])
+  const [messages, setMessages] = useState<Message[]>(() => {
+    if (typeof window === 'undefined') return []
+    try {
+      const saved = localStorage.getItem('lexbot-history')
+      return saved ? JSON.parse(saved) : []
+    } catch {
+      return []
+    }
+  })
   const [audioAmplitude, setAudioAmplitude] = useState(0)
   const [liveTranscript, setLiveTranscript] = useState('')
   const [lastResponse, setLastResponse] = useState('')
@@ -122,6 +130,15 @@ export function LexBot() {
   useEffect(() => { statusRef.current = status }, [status])
   useEffect(() => { modeRef.current = mode }, [mode])
   useEffect(() => { messagesRef.current = messages }, [messages])
+
+  // Persist chat history to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('lexbot-history', JSON.stringify(messages))
+    } catch {
+      // storage quota exceeded or unavailable — ignore
+    }
+  }, [messages])
 
   // Auto-scroll chat history
   useEffect(() => {
@@ -622,12 +639,23 @@ export function LexBot() {
 
         {/* Conversation history toggle */}
         {messages.length > 0 && (
-          <button
-            className="pointer-events-auto text-xs text-gray-700 hover:text-gray-500 tracking-widest uppercase transition-colors duration-200 mt-1"
-            onClick={() => setShowHistory((h) => !h)}
-          >
-            {showHistory ? '▲ Hide transcript' : '▼ Show transcript'}
-          </button>
+          <div className="pointer-events-auto flex items-center gap-3 mt-1">
+            <button
+              className="text-xs text-gray-700 hover:text-gray-500 tracking-widest uppercase transition-colors duration-200"
+              onClick={() => setShowHistory((h) => !h)}
+            >
+              {showHistory ? '▲ Hide transcript' : '▼ Show transcript'}
+            </button>
+            <button
+              className="text-xs text-gray-700 hover:text-red-500 tracking-widest uppercase transition-colors duration-200"
+              onClick={() => {
+                setMessages([])
+                localStorage.removeItem('lexbot-history')
+              }}
+            >
+              Clear
+            </button>
+          </div>
         )}
       </div>
 

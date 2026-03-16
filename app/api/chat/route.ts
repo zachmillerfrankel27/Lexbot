@@ -3,6 +3,27 @@ import Anthropic from '@anthropic-ai/sdk'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
+// ── Simple in-process rate limiter ─────────────────────────────────────────
+// Limits each IP to RATE_LIMIT_MAX requests per RATE_LIMIT_WINDOW_MS.
+// Note: serverless instances don't share memory, so this guards against burst
+// abuse within a single instance. The invite-code gate is the primary guard.
+const RATE_LIMIT_MAX = Number(process.env.RATE_LIMIT_MAX ?? 20)
+const RATE_LIMIT_WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS ?? 60_000)
+
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>()
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now()
+  const entry = rateLimitMap.get(ip)
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS })
+    return false
+  }
+  if (entry.count >= RATE_LIMIT_MAX) return true
+  entry.count++
+  return false
+}
+
 const BASE_PERSONA = `You are Lex, an elite law school tutor. You have the knowledge of a senior partner at a V10 law firm and the Socratic teaching ability of a beloved law professor. You help law students master cases deeply, connect doctrine to the real world, and perform brilliantly in class and on exams.
 
 Your core capabilities:
@@ -45,6 +66,14 @@ At each step, be clear about what you expect next so the student always knows wh
 }
 
 export async function POST(req: NextRequest) {
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown'
+  if (isRateLimited(ip)) {
+    return NextResponse.json(
+      { error: 'Too many requests. Please slow down.' },
+      { status: 429 }
+    )
+  }
+
   try {
     const { messages, mode, notes } = await req.json()
 
