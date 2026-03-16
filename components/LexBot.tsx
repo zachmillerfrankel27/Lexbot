@@ -9,8 +9,19 @@ import { Walkthrough, shouldShowWalkthrough } from './Walkthrough'
 
 type Status = 'idle' | 'listening' | 'thinking' | 'speaking'
 type Mode = 'discussion' | 'socratic' | 'examprep'
+type AppPhase = 'awaiting_name' | 'awaiting_mode' | 'active'
 type ExamStep = 'topic' | 'factpattern' | 'issuespotting' | 'writtenanswer' | 'grading' | 'done'
 type Message = { role: 'user' | 'assistant'; content: string }
+
+// ─── Mode detection from speech ───────────────────────────────────────────────
+
+function detectModeFromSpeech(text: string): Mode | null {
+  const t = text.toLowerCase()
+  if (t.includes('exam') || t.includes('prep') || t.includes('practice') || t.includes('fact pattern')) return 'examprep'
+  if (t.includes('socrat') || t.includes('question')) return 'socratic'
+  if (t.includes('discuss') || t.includes('talk') || t.includes('chat') || t.includes('simply') || t.includes('convers')) return 'discussion'
+  return null
+}
 
 // ─── Status label & color helpers ─────────────────────────────────────────────
 
@@ -108,6 +119,11 @@ export function LexBot() {
   const [showHistory, setShowHistory] = useState(false)
   const [hasGreeted, setHasGreeted] = useState(false)
   const [showWalkthrough, setShowWalkthrough] = useState(false)
+  const [userName, setUserName] = useState<string>(() => {
+    if (typeof window === 'undefined') return ''
+    try { return localStorage.getItem('lexbot-username') ?? '' } catch { return '' }
+  })
+  const [appPhase, setAppPhase] = useState<AppPhase>('active')
 
   // Show walkthrough on first visit (deferred so localStorage is available)
   useEffect(() => {
@@ -125,6 +141,8 @@ export function LexBot() {
 
   const statusRef = useRef<Status>('idle')
   const modeRef = useRef<Mode | null>(null)
+  const appPhaseRef = useRef<AppPhase>('active')
+  const startListeningRef = useRef<() => void>(() => {})
   const isSpeakingRef = useRef(false)
   const audioCtxRef = useRef<AudioContext | null>(null)
   const recognitionRef = useRef<SpeechRecognition | null>(null)
@@ -137,6 +155,7 @@ export function LexBot() {
   useEffect(() => { statusRef.current = status }, [status])
   useEffect(() => { modeRef.current = mode }, [mode])
   useEffect(() => { messagesRef.current = messages }, [messages])
+  useEffect(() => { appPhaseRef.current = appPhase }, [appPhase])
 
   // Persist chat history to localStorage
   useEffect(() => {
@@ -287,6 +306,33 @@ export function LexBot() {
 
   const handleVoiceResult = useCallback(
     (transcript: string) => {
+      // ── Initialization phases ──────────────────────────────────────────────
+      if (appPhaseRef.current === 'awaiting_name') {
+        const raw = transcript.trim().split(/\s+/)[0] ?? 'Counselor'
+        const name = raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase()
+        setUserName(name)
+        try { localStorage.setItem('lexbot-username', name) } catch { /* ignore */ }
+        setAppPhase('awaiting_mode')
+        appPhaseRef.current = 'awaiting_mode'
+        speak(
+          `Hi ${name}! What do you want to work on today? We can simply talk a topic out, work through something Socratically, or run an exam prep session.`
+        ).then(() => startListeningRef.current())
+        return
+      }
+
+      if (appPhaseRef.current === 'awaiting_mode') {
+        const detected = detectModeFromSpeech(transcript)
+        if (detected) {
+          selectMode(detected)
+        } else {
+          speak(
+            "I didn't quite catch that — you can say discussion, Socratic, or exam prep."
+          ).then(() => startListeningRef.current())
+        }
+        return
+      }
+
+      // ── Normal conversation ────────────────────────────────────────────────
       if (modeRef.current === 'examprep') {
         const step = examStep
         if (step === 'topic') {
@@ -301,7 +347,7 @@ export function LexBot() {
       handleUserMessage(transcript)
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [examStep, handleUserMessage]
+    [examStep, handleUserMessage, selectMode, speak]
   )
 
   const startListening = useCallback(() => {
@@ -361,11 +407,16 @@ export function LexBot() {
     recognitionRef.current = recognition
   }, [handleVoiceResult])
 
+  // Keep startListeningRef in sync so handleVoiceResult can call it without a circular dep
+  useEffect(() => { startListeningRef.current = startListening }, [startListening])
+
   // ── Mode selection ─────────────────────────────────────────────────────────
 
   const selectMode = useCallback((selectedMode: Mode) => {
     setMode(selectedMode)
     setShowModeSelector(false)
+    setAppPhase('active')
+    appPhaseRef.current = 'active'
     setMessages([])
     setLastResponse('')
     setExamStep('topic')
@@ -527,9 +578,17 @@ export function LexBot() {
               onClick={() => {
                 if (!hasGreeted) {
                   setHasGreeted(true)
-                  speak(
-                    "Good to meet you, counselor. I'm Lex, your law tutor. Choose a mode to get started — Discussion, Socratic, or Exam Prep."
-                  ).then(() => setShowModeSelector(true))
+                  if (!userName) {
+                    setAppPhase('awaiting_name')
+                    appPhaseRef.current = 'awaiting_name'
+                    speak("Hi there — I'm Lex, your law tutor. What's your name?").then(() => startListeningRef.current())
+                  } else {
+                    setAppPhase('awaiting_mode')
+                    appPhaseRef.current = 'awaiting_mode'
+                    speak(
+                      `Hi ${userName}, what do you want to work on today? We can simply talk a topic out, work through something Socratically, or run an exam prep session.`
+                    ).then(() => startListeningRef.current())
+                  }
                   return
                 }
                 if (mode === 'examprep' && examStep === 'writtenanswer') return
