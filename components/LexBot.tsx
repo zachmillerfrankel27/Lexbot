@@ -176,7 +176,7 @@ export function LexBot() {
     const audioCtx = audioCtxRef.current
     if (audioCtx.state === 'suspended') await audioCtx.resume()
 
-    // Try ElevenLabs
+    // Try ElevenLabs — await until audio fully ends before resolving
     try {
       const res = await fetch('/api/tts', {
         method: 'POST',
@@ -209,21 +209,26 @@ export function LexBot() {
           requestAnimationFrame(animate)
         }
 
-        source.start()
-        animate()
-
-        source.onended = () => {
-          isSpeakingRef.current = false
-          setAudioAmplitude(0)
-          setStatus('idle')
-        }
+        await new Promise<void>((resolve) => {
+          source.onended = () => {
+            isSpeakingRef.current = false
+            setAudioAmplitude(0)
+            setStatus('idle')
+            resolve()
+          }
+          source.start()
+          animate()
+        })
         return
+      } else {
+        const errText = await res.text()
+        console.warn('ElevenLabs TTS error:', res.status, errText)
       }
     } catch (err) {
       console.warn('ElevenLabs TTS failed, falling back to browser speech:', err)
     }
 
-    // Fallback: browser speechSynthesis
+    // Fallback: browser speechSynthesis — await until speech fully ends
     window.speechSynthesis.cancel()
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.lang = 'en-US'
@@ -237,19 +242,24 @@ export function LexBot() {
         setAudioAmplitude(0.05 + Math.random() * 0.2)
       }, 80)
     }
-    utterance.onend = () => {
-      clearInterval(lipInterval)
-      isSpeakingRef.current = false
-      setAudioAmplitude(0)
-      setStatus('idle')
-    }
-    utterance.onerror = () => {
-      clearInterval(lipInterval)
-      isSpeakingRef.current = false
-      setAudioAmplitude(0)
-      setStatus('idle')
-    }
-    window.speechSynthesis.speak(utterance)
+
+    await new Promise<void>((resolve) => {
+      utterance.onend = () => {
+        clearInterval(lipInterval)
+        isSpeakingRef.current = false
+        setAudioAmplitude(0)
+        setStatus('idle')
+        resolve()
+      }
+      utterance.onerror = () => {
+        clearInterval(lipInterval)
+        isSpeakingRef.current = false
+        setAudioAmplitude(0)
+        setStatus('idle')
+        resolve()
+      }
+      window.speechSynthesis.speak(utterance)
+    })
   }, [])
 
   // ── Send message to Claude ─────────────────────────────────────────────────
@@ -419,11 +429,7 @@ export function LexBot() {
     const greeting = customGreeting ?? defaultGreetings[selectedMode]
 
     speak(greeting).then(() => {
-      if (selectedMode !== 'examprep') {
-        setTimeout(() => {
-          if (statusRef.current === 'idle') startListening()
-        }, 300)
-      }
+      if (selectedMode !== 'examprep') startListening()
     })
   }, [speak, startListening])
 
