@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect, Suspense } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { Avatar } from './Avatar'
+import { Walkthrough, shouldShowWalkthrough } from './Walkthrough'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -106,6 +107,12 @@ export function LexBot() {
   const [lastResponse, setLastResponse] = useState('')
   const [showHistory, setShowHistory] = useState(false)
   const [hasGreeted, setHasGreeted] = useState(false)
+  const [showWalkthrough, setShowWalkthrough] = useState(false)
+
+  // Show walkthrough on first visit (deferred so localStorage is available)
+  useEffect(() => {
+    if (shouldShowWalkthrough()) setShowWalkthrough(true)
+  }, [])
 
   // Exam Prep state
   const [examStep, setExamStep] = useState<ExamStep>('topic')
@@ -739,12 +746,17 @@ export function LexBot() {
       )}
 
       {/* Initial hint */}
-      {!hasGreeted && status === 'idle' && (
+      {!hasGreeted && status === 'idle' && !showWalkthrough && (
         <div className="absolute bottom-8 left-0 right-0 flex justify-center pointer-events-none z-10">
           <p className="text-gray-700 text-xs tracking-widest uppercase animate-pulse">
             Click the face to begin
           </p>
         </div>
+      )}
+
+      {/* First-time walkthrough */}
+      {showWalkthrough && (
+        <Walkthrough onDone={() => setShowWalkthrough(false)} />
       )}
     </div>
   )
