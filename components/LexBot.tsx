@@ -13,15 +13,6 @@ type AppPhase = 'awaiting_name' | 'awaiting_mode' | 'active'
 type ExamStep = 'topic' | 'factpattern' | 'issuespotting' | 'writtenanswer' | 'grading' | 'done'
 type Message = { role: 'user' | 'assistant'; content: string }
 
-// ─── Mode detection from speech ───────────────────────────────────────────────
-
-function detectModeFromSpeech(text: string): Mode | null {
-  const t = text.toLowerCase()
-  if (t.includes('exam') || t.includes('prep') || t.includes('practice') || t.includes('fact pattern')) return 'examprep'
-  if (t.includes('socrat') || t.includes('question')) return 'socratic'
-  if (t.includes('discuss') || t.includes('talk') || t.includes('chat') || t.includes('simply') || t.includes('convers')) return 'discussion'
-  return null
-}
 
 // ─── Status label & color helpers ─────────────────────────────────────────────
 
@@ -321,14 +312,7 @@ export function LexBot() {
       }
 
       if (appPhaseRef.current === 'awaiting_mode') {
-        const detected = detectModeFromSpeech(transcript)
-        if (detected) {
-          selectMode(detected)
-        } else {
-          speak(
-            "I didn't quite catch that — you can say discussion, Socratic, or exam prep."
-          ).then(() => startListeningRef.current())
-        }
+        handleModeDetection(transcript)
         return
       }
 
@@ -347,7 +331,7 @@ export function LexBot() {
       handleUserMessage(transcript)
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [examStep, handleUserMessage, selectMode, speak]
+    [examStep, handleModeDetection, handleUserMessage]
   )
 
   const startListening = useCallback(() => {
@@ -412,7 +396,7 @@ export function LexBot() {
 
   // ── Mode selection ─────────────────────────────────────────────────────────
 
-  const selectMode = useCallback((selectedMode: Mode) => {
+  const selectMode = useCallback((selectedMode: Mode, customGreeting?: string) => {
     setMode(selectedMode)
     setShowModeSelector(false)
     setAppPhase('active')
@@ -425,13 +409,15 @@ export function LexBot() {
     setShowWrittenInput(false)
     setShowIsDoneButton(false)
 
-    const greetings: Record<Mode, string> = {
+    const defaultGreetings: Record<Mode, string> = {
       discussion: "Discussion mode. What case or concept do you want to dig into?",
       socratic: "Socratic mode. I won't give you answers — I'll ask questions until you find them yourself. What topic are we working on?",
       examprep: "Exam prep mode. Give me a topic or a specific area of law and I'll generate a fact pattern for you.",
     }
 
-    speak(greetings[selectedMode]).then(() => {
+    const greeting = customGreeting ?? defaultGreetings[selectedMode]
+
+    speak(greeting).then(() => {
       if (selectedMode !== 'examprep') {
         setTimeout(() => {
           if (statusRef.current === 'idle') startListening()
@@ -439,6 +425,27 @@ export function LexBot() {
       }
     })
   }, [speak, startListening])
+
+  // ── AI-powered mode detection ──────────────────────────────────────────────
+
+  const handleModeDetection = useCallback(async (transcript: string) => {
+    setStatus('thinking')
+    try {
+      const res = await fetch('/api/classify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcript }),
+      })
+      if (!res.ok) throw new Error('classify failed')
+      const { mode: detectedMode, response: firstResponse } = await res.json()
+      selectMode(detectedMode as Mode, firstResponse)
+    } catch {
+      // Network/API failure — fall back gracefully
+      speak("I had trouble with that. Could you say it again?")
+        .then(() => startListeningRef.current())
+      setStatus('idle')
+    }
+  }, [selectMode, speak])
 
   // ── Exam Prep flow ─────────────────────────────────────────────────────────
 
