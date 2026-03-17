@@ -133,6 +133,7 @@ export function LexBot() {
   const statusRef = useRef<Status>('idle')
   const modeRef = useRef<Mode | null>(null)
   const appPhaseRef = useRef<AppPhase>('active')
+  const examStepRef = useRef<ExamStep>('topic')
   const startListeningRef = useRef<() => void>(() => {})
   const handleModeDetectionRef = useRef<(transcript: string) => void>(() => {})
   const isSpeakingRef = useRef(false)
@@ -149,6 +150,7 @@ export function LexBot() {
   useEffect(() => { modeRef.current = mode }, [mode])
   useEffect(() => { messagesRef.current = messages }, [messages])
   useEffect(() => { appPhaseRef.current = appPhase }, [appPhase])
+  useEffect(() => { examStepRef.current = examStep }, [examStep])
 
   // Persist chat history to localStorage
   useEffect(() => {
@@ -231,7 +233,7 @@ export function LexBot() {
           animate()
         })
         // Brief pause so room echo clears before mic opens
-        await new Promise((r) => setTimeout(r, 400))
+        await new Promise((r) => setTimeout(r, 900))
         speakLockRef.current = false
         return
       } else {
@@ -315,6 +317,13 @@ export function LexBot() {
             { role: 'assistant', content: data.message },
           ])
           await speak(data.message)
+          // Auto-restart listening for free-flowing conversation,
+          // unless exam prep is in a text-input or terminal step.
+          const step = examStepRef.current
+          const inTextStep = step === 'writtenanswer' || step === 'grading' || step === 'done'
+          if (modeRef.current !== 'examprep' || !inTextStep) {
+            startListeningRef.current()
+          }
         } else {
           setStatus('idle')
         }
@@ -411,6 +420,14 @@ export function LexBot() {
     }
 
     recognition.onerror = (event) => {
+      if (event.error === 'no-speech') {
+        // Mic timed out with no input — silently restart so the user doesn't
+        // have to tap again just because they paused before speaking.
+        setStatus('idle')
+        setLiveTranscript('')
+        setTimeout(() => startListeningRef.current(), 200)
+        return
+      }
       if (event.error !== 'aborted') console.warn('Speech recognition error:', event.error)
       setStatus('idle')
       setLiveTranscript('')
@@ -516,6 +533,7 @@ export function LexBot() {
           await speak(data.message)
           setExamStep('issuespotting')
           setShowIsDoneButton(true)
+          startListeningRef.current()
         } else {
           setStatus('idle')
         }
