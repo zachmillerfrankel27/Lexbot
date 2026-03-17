@@ -139,6 +139,7 @@ export function LexBot() {
   const isSpeakingRef = useRef(false)
   const speakLockRef = useRef(false)
   const audioCtxRef = useRef<AudioContext | null>(null)
+  const audioSourceRef = useRef<AudioBufferSourceNode | null>(null)
   const recognitionRef = useRef<SpeechRecognition | null>(null)
   const messagesRef = useRef<Message[]>([])
   const chatEndRef = useRef<HTMLDivElement>(null)
@@ -225,10 +226,12 @@ export function LexBot() {
         await new Promise<void>((resolve) => {
           source.onended = () => {
             isSpeakingRef.current = false
+            audioSourceRef.current = null
             setAudioAmplitude(0)
             setStatus('idle')
             resolve()
           }
+          audioSourceRef.current = source
           source.start()
           animate()
         })
@@ -379,12 +382,19 @@ export function LexBot() {
   const startListening = useCallback(() => {
     if (statusRef.current !== 'idle') {
       if (statusRef.current === 'speaking') {
+        // Stop browser TTS
         window.speechSynthesis.cancel()
+        // Stop ElevenLabs Web Audio if playing
+        try { audioSourceRef.current?.stop() } catch { /* already stopped */ }
+        audioSourceRef.current = null
         isSpeakingRef.current = false
+        speakLockRef.current = false
         setAudioAmplitude(0)
         setStatus('idle')
+        // Fall through to start recognition so the user's click is honoured
+      } else {
+        return
       }
-      return
     }
 
     if (!audioCtxRef.current) {
