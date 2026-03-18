@@ -176,7 +176,7 @@ export function LexBot() {
 
     // Stop any active recognition before speaking to prevent echo
     if (recognitionRef.current) {
-      recognitionRef.current.stop()
+      try { recognitionRef.current.stop() } catch { /* already stopped */ }
       recognitionRef.current = null
     }
 
@@ -344,7 +344,12 @@ export function LexBot() {
     (transcript: string) => {
       // ── Initialization phases ──────────────────────────────────────────────
       if (appPhaseRef.current === 'awaiting_name') {
-        const raw = transcript.trim().split(/\s+/)[0] ?? 'Counselor'
+        // Extract name from common intro patterns ("I'm Zach", "my name is Zach", etc.)
+        // Fall back to the last word of the transcript, then "there".
+        const nameMatch = transcript.match(
+          /\b(?:i'?m|i\s+am|name(?:'s|\s+is)?|call\s+me)\s+([a-zA-Z]+)/i
+        )
+        const raw = nameMatch?.[1] ?? transcript.trim().split(/\s+/).pop() ?? 'there'
         const name = raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase()
         setUserName(name)
         try { localStorage.setItem('lexbot-username', name) } catch { /* ignore */ }
@@ -456,6 +461,8 @@ export function LexBot() {
       if (!handledByResult && recognitionRef.current === recognition && statusRef.current === 'listening') {
         setStatus('idle')
       }
+      // Clear the ref so speak() doesn't call .stop() on this already-ended instance
+      if (recognitionRef.current === recognition) recognitionRef.current = null
     }
 
     recognition.start()
