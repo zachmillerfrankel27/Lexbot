@@ -418,6 +418,11 @@ export function LexBot() {
       setLiveTranscript('')
     }
 
+    // Track whether this recognition instance already delivered a final result,
+    // or was deliberately stopped by speak(). Both cases mean onend should NOT
+    // reset status to idle — the caller manages status from that point.
+    let handledByResult = false
+
     recognition.onresult = (event) => {
       let transcript = ''
       for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -425,6 +430,7 @@ export function LexBot() {
       }
       setLiveTranscript(transcript)
       if (event.results[event.results.length - 1].isFinal) {
+        handledByResult = true
         handleVoiceResult(transcript)
       }
     }
@@ -444,7 +450,12 @@ export function LexBot() {
     }
 
     recognition.onend = () => {
-      if (statusRef.current === 'listening') setStatus('idle')
+      // Only reset to idle if:
+      // 1. No final result was handled (handleVoiceResult manages status after a result), AND
+      // 2. This is still the active recognition (speak() nulls recognitionRef when it stops one)
+      if (!handledByResult && recognitionRef.current === recognition && statusRef.current === 'listening') {
+        setStatus('idle')
+      }
     }
 
     recognition.start()
