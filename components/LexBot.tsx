@@ -112,7 +112,16 @@ export function LexBot() {
   const [showWalkthrough, setShowWalkthrough] = useState(false)
   const [userName, setUserName] = useState<string>(() => {
     if (typeof window === 'undefined') return ''
-    try { return localStorage.getItem('lexbot-username') ?? '' } catch { return '' }
+    try {
+      const stored = localStorage.getItem('lexbot-username') ?? ''
+      // Discard any previously-stored non-name (e.g. "I" from a bad extraction)
+      const NON_NAMES = new Set(['i', 'a', 'an', 'the', 'my', 'is', 'am', 'are', 'its', 'it', 'there'])
+      if (NON_NAMES.has(stored.toLowerCase())) {
+        localStorage.removeItem('lexbot-username')
+        return ''
+      }
+      return stored
+    } catch { return '' }
   })
   const [appPhase, setAppPhase] = useState<AppPhase>('active')
 
@@ -354,8 +363,13 @@ export function LexBot() {
         const nameMatch = transcript.match(
           /\b(?:i'?m|i\s+am|name(?:'s|\s+is)?|call\s+me)\s+([a-zA-Z]+)/i
         )
-        const raw = nameMatch?.[1] ?? transcript.trim().split(/\s+/).pop() ?? 'there'
-        const name = raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase()
+        // Non-name words that should never be accepted as a name
+        const NON_NAMES = new Set(['i', 'a', 'an', 'the', 'my', 'is', 'am', 'are', 'its', 'it'])
+        const raw = nameMatch?.[1] ?? transcript.trim().split(/\s+/).pop() ?? ''
+        const candidate = raw.toLowerCase()
+        const name = (raw && !NON_NAMES.has(candidate))
+          ? raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase()
+          : 'there'
         setUserName(name)
         try { localStorage.setItem('lexbot-username', name) } catch { /* ignore */ }
         setAppPhase('awaiting_mode')
