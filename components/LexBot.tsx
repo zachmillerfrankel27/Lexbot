@@ -112,7 +112,16 @@ export function LexBot() {
   const [showWalkthrough, setShowWalkthrough] = useState(false)
   const [userName, setUserName] = useState<string>(() => {
     if (typeof window === 'undefined') return ''
-    try { return localStorage.getItem('lexbot-username') ?? '' } catch { return '' }
+    try {
+      const stored = localStorage.getItem('lexbot-username') ?? ''
+      // Discard any previously-stored non-name (e.g. "I" from a bad extraction)
+      const NON_NAMES = new Set(['i', 'a', 'an', 'the', 'my', 'is', 'am', 'are', 'its', 'it', 'there'])
+      if (NON_NAMES.has(stored.toLowerCase())) {
+        localStorage.removeItem('lexbot-username')
+        return ''
+      }
+      return stored
+    } catch { return '' }
   })
   const [appPhase, setAppPhase] = useState<AppPhase>('active')
 
@@ -136,6 +145,7 @@ export function LexBot() {
   const examStepRef = useRef<ExamStep>('topic')
   const startListeningRef = useRef<() => void>(() => {})
   const handleModeDetectionRef = useRef<(transcript: string) => void>(() => {})
+  const handleUserMessageRef = useRef<(text: string, overrideMode?: Mode) => Promise<void>>(() => Promise.resolve())
   const isSpeakingRef = useRef(false)
   const speakLockRef = useRef(false)
   const audioCtxRef = useRef<AudioContext | null>(null)
@@ -343,6 +353,10 @@ export function LexBot() {
     [speak, notes]
   )
 
+  // Keep handleUserMessageRef in sync so it can be called from mode detection
+  // without creating circular dependency issues.
+  useEffect(() => { handleUserMessageRef.current = handleUserMessage }, [handleUserMessage])
+
   // ── Voice recognition ──────────────────────────────────────────────────────
 
   const handleVoiceResult: (transcript: string) => void = useCallback(
@@ -354,8 +368,13 @@ export function LexBot() {
         const nameMatch = transcript.match(
           /\b(?:i'?m|i\s+am|name(?:'s|\s+is)?|call\s+me)\s+([a-zA-Z]+)/i
         )
-        const raw = nameMatch?.[1] ?? transcript.trim().split(/\s+/).pop() ?? 'there'
-        const name = raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase()
+        // Non-name words that should never be accepted as a name
+        const NON_NAMES = new Set(['i', 'a', 'an', 'the', 'my', 'is', 'am', 'are', 'its', 'it'])
+        const raw = nameMatch?.[1] ?? transcript.trim().split(/\s+/).pop() ?? ''
+        const candidate = raw.toLowerCase()
+        const name = (raw && !NON_NAMES.has(candidate))
+          ? raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase()
+          : 'there'
         setUserName(name)
         try { localStorage.setItem('lexbot-username', name) } catch { /* ignore */ }
         setAppPhase('awaiting_mode')
@@ -540,8 +559,15 @@ export function LexBot() {
       const { mode: detectedMode, response: firstResponse } = result
       selectMode(detectedMode as Mode, firstResponse)
     } catch {
-      // Both attempts failed — default to discussion and just start talking
-      selectMode('discussion', "Let's dive in. What's on your mind?")
+      // Both classify attempts failed. Don't drop the user's question —
+      // set up discussion mode silently and answer what they actually said.
+      setMode('discussion')
+      modeRef.current = 'discussion'
+      setShowModeSelector(false)
+      setAppPhase('active')
+      appPhaseRef.current = 'active'
+      setMessages([])
+      handleUserMessageRef.current(transcript, 'discussion')
     }
   }, [selectMode])
 
