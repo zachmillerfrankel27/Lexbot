@@ -228,15 +228,19 @@ export function LexBot() {
             isSpeakingRef.current = false
             audioSourceRef.current = null
             setAudioAmplitude(0)
-            setStatus('idle')
+            // Keep status='speaking' — don't go idle yet.
+            // The echo-clearing pause below runs while the ring still shows
+            // "speaking", so users see a seamless speaking→listening transition
+            // with no "Click to speak" flash in between.
             resolve()
           }
           audioSourceRef.current = source
           source.start()
           animate()
         })
-        // Brief pause so room echo clears before mic opens
+        // Echo-clearing pause — still in 'speaking' state visually
         await new Promise((r) => setTimeout(r, 900))
+        setStatus('idle')
         speakLockRef.current = false
         return
       } else {
@@ -268,7 +272,6 @@ export function LexBot() {
         clearInterval(lipInterval)
         isSpeakingRef.current = false
         setAudioAmplitude(0)
-        setStatus('idle')
         resolve()
       }, Math.max(3000, text.length * 65))
 
@@ -277,15 +280,15 @@ export function LexBot() {
         clearInterval(lipInterval)
         isSpeakingRef.current = false
         setAudioAmplitude(0)
-        setStatus('idle')
         resolve()
       }
       utterance.onend = done
       utterance.onerror = done
       window.speechSynthesis.speak(utterance)
     })
-    // Brief pause so room echo clears before mic opens
+    // Echo-clearing pause — still in 'speaking' state visually
     await new Promise((r) => setTimeout(r, 900))
+    setStatus('idle')
     speakLockRef.current = false
   }, [])
 
@@ -329,10 +332,12 @@ export function LexBot() {
           }
         } else {
           setStatus('idle')
+          startListeningRef.current()
         }
       } catch (err) {
         console.error('Chat error:', err)
         setStatus('idle')
+        startListeningRef.current()
       }
     },
     [speak, notes]
@@ -572,10 +577,12 @@ export function LexBot() {
           startListeningRef.current()
         } else {
           setStatus('idle')
+          startListeningRef.current()
         }
       } catch (err) {
         console.error('Exam prep error:', err)
         setStatus('idle')
+        startListeningRef.current()
       }
     },
     [speak, notes]
@@ -716,7 +723,11 @@ export function LexBot() {
         <p
           className={`text-sm tracking-[0.2em] uppercase font-light transition-colors duration-500 ${STATUS_COLOR[status]}`}
         >
-          {mode === 'examprep' && examStep === 'writtenanswer' ? 'Type your answer below' : STATUS_LABEL[status]}
+          {mode === 'examprep' && examStep === 'writtenanswer'
+            ? 'Type your answer below'
+            : status === 'idle' && hasGreeted
+            ? ''
+            : STATUS_LABEL[status]}
         </p>
 
         {/* Live transcript */}
