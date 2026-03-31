@@ -145,6 +145,7 @@ export function LexBot() {
   const examStepRef = useRef<ExamStep>('topic')
   const startListeningRef = useRef<() => void>(() => {})
   const handleModeDetectionRef = useRef<(transcript: string) => void>(() => {})
+  const handleUserMessageRef = useRef<(text: string, overrideMode?: Mode) => Promise<void>>(() => Promise.resolve())
   const isSpeakingRef = useRef(false)
   const speakLockRef = useRef(false)
   const audioCtxRef = useRef<AudioContext | null>(null)
@@ -352,6 +353,10 @@ export function LexBot() {
     [speak, notes]
   )
 
+  // Keep handleUserMessageRef in sync so it can be called from mode detection
+  // without creating circular dependency issues.
+  useEffect(() => { handleUserMessageRef.current = handleUserMessage }, [handleUserMessage])
+
   // ── Voice recognition ──────────────────────────────────────────────────────
 
   const handleVoiceResult: (transcript: string) => void = useCallback(
@@ -554,8 +559,15 @@ export function LexBot() {
       const { mode: detectedMode, response: firstResponse } = result
       selectMode(detectedMode as Mode, firstResponse)
     } catch {
-      // Both attempts failed — default to discussion and just start talking
-      selectMode('discussion', "Let's dive in. What's on your mind?")
+      // Both classify attempts failed. Don't drop the user's question —
+      // set up discussion mode silently and answer what they actually said.
+      setMode('discussion')
+      modeRef.current = 'discussion'
+      setShowModeSelector(false)
+      setAppPhase('active')
+      appPhaseRef.current = 'active'
+      setMessages([])
+      handleUserMessageRef.current(transcript, 'discussion')
     }
   }, [selectMode])
 
