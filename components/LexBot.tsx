@@ -319,12 +319,16 @@ export function LexBot() {
 
       const activeMode = overrideMode ?? modeRef.current ?? 'discussion'
 
+      const chatController = new AbortController()
+      const chatTimeout = setTimeout(() => chatController.abort(), 20000)
       try {
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ messages: newMessages, mode: activeMode, notes }),
+          signal: chatController.signal,
         })
+        clearTimeout(chatTimeout)
 
         const data = await res.json()
         if (data.message) {
@@ -538,13 +542,20 @@ export function LexBot() {
     setStatus('thinking')
 
     const tryClassify = async () => {
-      const res = await fetch('/api/classify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcript }),
-      })
-      if (!res.ok) throw new Error(`classify ${res.status}`)
-      return res.json()
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 7000)
+      try {
+        const res = await fetch('/api/classify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transcript }),
+          signal: controller.signal,
+        })
+        if (!res.ok) throw new Error(`classify ${res.status}`)
+        return res.json()
+      } finally {
+        clearTimeout(timeout)
+      }
     }
 
     try {
@@ -587,12 +598,16 @@ export function LexBot() {
       ]
       setMessages(newMessages)
 
+      const examController = new AbortController()
+      const examTimeout = setTimeout(() => examController.abort(), 20000)
       try {
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ messages: newMessages, mode: 'examprep', notes }),
+          signal: examController.signal,
         })
+        clearTimeout(examTimeout)
         const data = await res.json()
         if (data.message) {
           setFactPattern(data.message)
