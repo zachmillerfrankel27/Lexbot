@@ -480,6 +480,11 @@ export function LexBot() {
         setTimeout(() => startListeningRef.current(), 200)
         return
       }
+      // Same guard as no-speech: if this instance was already superseded
+      // (e.g. the defensive stop in startListening fired an 'aborted' error
+      // on the old instance after the new one started), don't clobber the
+      // new recognition's 'listening' status.
+      if (recognitionRef.current !== recognition) return
       if (event.error !== 'aborted') console.warn('Speech recognition error:', event.error)
       setStatus('idle')
       setLiveTranscript('')
