@@ -285,7 +285,7 @@ export function LexBot() {
       window.speechSynthesis.speak(utterance)
     })
     // Brief pause so room echo clears before mic opens
-    await new Promise((r) => setTimeout(r, 400))
+    await new Promise((r) => setTimeout(r, 900))
     speakLockRef.current = false
   }, [])
 
@@ -442,6 +442,9 @@ export function LexBot() {
 
     recognition.onerror = (event) => {
       if (event.error === 'no-speech') {
+        // Bail out if speak() has already taken over — restarting now would
+        // open the mic while TTS audio is still playing, causing echo.
+        if (recognitionRef.current !== recognition) return
         // Mic timed out with no input — silently restart so the user doesn't
         // have to tap again just because they paused before speaking.
         setStatus('idle')
@@ -465,6 +468,11 @@ export function LexBot() {
       if (recognitionRef.current === recognition) recognitionRef.current = null
     }
 
+    // Stop any leftover recognition before starting a fresh instance
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop() } catch { /* ignore */ }
+      recognitionRef.current = null
+    }
     recognition.start()
     recognitionRef.current = recognition
   }, [handleVoiceResult])
