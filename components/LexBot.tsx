@@ -194,112 +194,118 @@ export function LexBot() {
     setLastResponse(text)
     isSpeakingRef.current = true
 
-    if (!audioCtxRef.current) {
-      audioCtxRef.current = new AudioContext()
-    }
-    const audioCtx = audioCtxRef.current
-    if (audioCtx.state === 'suspended') await audioCtx.resume()
-
-    // Try ElevenLabs — await until audio fully ends before resolving
+    // try/finally ensures the lock is ALWAYS released and status is ALWAYS
+    // reset — even if an unexpected error occurs mid-speech. Without this,
+    // a thrown error (e.g. AudioContext.resume() rejection) would leave
+    // speakLockRef=true forever and strand the user on "thinking/speaking".
     try {
-      const res = await fetch('/api/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
-      })
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new AudioContext()
+      }
+      const audioCtx = audioCtxRef.current
+      if (audioCtx.state === 'suspended') await audioCtx.resume()
 
-      if (res.ok) {
-        const arrayBuffer = await res.arrayBuffer()
-        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer)
+      // Try ElevenLabs — await until audio fully ends before resolving
+      let elevenlabsOk = false
+      try {
+        const res = await fetch('/api/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        })
 
-        const analyser = audioCtx.createAnalyser()
-        analyser.fftSize = 512
-        const dataArray = new Uint8Array(analyser.frequencyBinCount)
+        if (res.ok) {
+          const arrayBuffer = await res.arrayBuffer()
+          const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer)
 
-        const source = audioCtx.createBufferSource()
-        source.buffer = audioBuffer
-        source.connect(analyser)
-        analyser.connect(audioCtx.destination)
+          const analyser = audioCtx.createAnalyser()
+          analyser.fftSize = 512
+          const dataArray = new Uint8Array(analyser.frequencyBinCount)
 
-        const animate = () => {
-          if (!isSpeakingRef.current) return
-          analyser.getByteTimeDomainData(dataArray)
-          let sum = 0
-          for (let i = 0; i < dataArray.length; i++) {
-            const v = dataArray[i] / 128 - 1
-            sum += v * v
+          const source = audioCtx.createBufferSource()
+          source.buffer = audioBuffer
+          source.connect(analyser)
+          analyser.connect(audioCtx.destination)
+
+          const animate = () => {
+            if (!isSpeakingRef.current) return
+            analyser.getByteTimeDomainData(dataArray)
+            let sum = 0
+            for (let i = 0; i < dataArray.length; i++) {
+              const v = dataArray[i] / 128 - 1
+              sum += v * v
+            }
+            setAudioAmplitude(Math.sqrt(sum / dataArray.length))
+            requestAnimationFrame(animate)
           }
-          setAudioAmplitude(Math.sqrt(sum / dataArray.length))
-          requestAnimationFrame(animate)
+
+          await new Promise<void>((resolve) => {
+            source.onended = () => {
+              isSpeakingRef.current = false
+              audioSourceRef.current = null
+              setAudioAmplitude(0)
+              resolve()
+            }
+            audioSourceRef.current = source
+            source.start()
+            animate()
+          })
+          elevenlabsOk = true
+        } else {
+          const errText = await res.text()
+          console.warn('ElevenLabs TTS error:', res.status, errText)
+        }
+      } catch (err) {
+        console.warn('ElevenLabs TTS failed, falling back to browser speech:', err)
+      }
+
+      if (!elevenlabsOk) {
+        // Fallback: browser speechSynthesis — await until speech fully ends
+        window.speechSynthesis.cancel()
+        const utterance = new SpeechSynthesisUtterance(text)
+        utterance.lang = 'en-US'
+        utterance.rate = 0.88
+        utterance.pitch = 0.82
+        utterance.volume = 1
+
+        let lipInterval: ReturnType<typeof setInterval>
+        utterance.onstart = () => {
+          lipInterval = setInterval(() => {
+            setAudioAmplitude(0.05 + Math.random() * 0.2)
+          }, 80)
         }
 
         await new Promise<void>((resolve) => {
-          source.onended = () => {
+          // Chrome has a known bug where onend never fires — use a timeout as a fallback
+          const fallback = setTimeout(() => {
+            clearInterval(lipInterval)
             isSpeakingRef.current = false
-            audioSourceRef.current = null
             setAudioAmplitude(0)
-            // Keep status='speaking' — don't go idle yet.
-            // The echo-clearing pause below runs while the ring still shows
-            // "speaking", so users see a seamless speaking→listening transition
-            // with no "Click to speak" flash in between.
+            resolve()
+          }, Math.max(3000, text.length * 65))
+
+          const done = () => {
+            clearTimeout(fallback)
+            clearInterval(lipInterval)
+            isSpeakingRef.current = false
+            setAudioAmplitude(0)
             resolve()
           }
-          audioSourceRef.current = source
-          source.start()
-          animate()
+          utterance.onend = done
+          utterance.onerror = done
+          window.speechSynthesis.speak(utterance)
         })
-        // Echo-clearing pause — still in 'speaking' state visually
-        await new Promise((r) => setTimeout(r, 900))
-        setStatus('idle')
-        speakLockRef.current = false
-        return
-      } else {
-        const errText = await res.text()
-        console.warn('ElevenLabs TTS error:', res.status, errText)
       }
-    } catch (err) {
-      console.warn('ElevenLabs TTS failed, falling back to browser speech:', err)
+
+      // Echo-clearing pause — still in 'speaking' state visually
+      await new Promise((r) => setTimeout(r, 900))
+    } finally {
+      // Always release the lock and reset status, even if an error occurred
+      isSpeakingRef.current = false
+      setAudioAmplitude(0)
+      setStatus('idle')
+      speakLockRef.current = false
     }
-
-    // Fallback: browser speechSynthesis — await until speech fully ends
-    window.speechSynthesis.cancel()
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.lang = 'en-US'
-    utterance.rate = 0.88
-    utterance.pitch = 0.82
-    utterance.volume = 1
-
-    let lipInterval: ReturnType<typeof setInterval>
-    utterance.onstart = () => {
-      lipInterval = setInterval(() => {
-        setAudioAmplitude(0.05 + Math.random() * 0.2)
-      }, 80)
-    }
-
-    await new Promise<void>((resolve) => {
-      // Chrome has a known bug where onend never fires — use a timeout as a fallback
-      const fallback = setTimeout(() => {
-        clearInterval(lipInterval)
-        isSpeakingRef.current = false
-        setAudioAmplitude(0)
-        resolve()
-      }, Math.max(3000, text.length * 65))
-
-      const done = () => {
-        clearTimeout(fallback)
-        clearInterval(lipInterval)
-        isSpeakingRef.current = false
-        setAudioAmplitude(0)
-        resolve()
-      }
-      utterance.onend = done
-      utterance.onerror = done
-      window.speechSynthesis.speak(utterance)
-    })
-    // Echo-clearing pause — still in 'speaking' state visually
-    await new Promise((r) => setTimeout(r, 900))
-    setStatus('idle')
-    speakLockRef.current = false
   }, [])
 
   // ── Send message to Claude ─────────────────────────────────────────────────
@@ -385,7 +391,7 @@ export function LexBot() {
         appPhaseRef.current = 'awaiting_mode'
         speak(
           `Hi ${name}! What do you want to work on today? We can simply talk a topic out, work through something Socratically, or run an exam prep session.`
-        ).then(() => startListeningRef.current())
+        ).then(() => startListeningRef.current()).catch(() => startListeningRef.current())
         return
       }
 
@@ -536,9 +542,9 @@ export function LexBot() {
 
     const greeting = customGreeting ?? defaultGreetings[selectedMode]
 
-    speak(greeting).then(() => {
-      if (selectedMode !== 'examprep') startListening()
-    })
+    speak(greeting)
+      .then(() => { if (selectedMode !== 'examprep') startListening() })
+      .catch(() => { if (selectedMode !== 'examprep') startListening() })
   }, [speak, startListening])
 
   // ── AI-powered mode detection ──────────────────────────────────────────────
@@ -737,13 +743,13 @@ export function LexBot() {
                   if (!userName) {
                     setAppPhase('awaiting_name')
                     appPhaseRef.current = 'awaiting_name'
-                    speak("Hi there — I'm Lex, your law tutor. What's your name?").then(() => startListeningRef.current())
+                    speak("Hi there — I'm Lex, your law tutor. What's your name?").then(() => startListeningRef.current()).catch(() => startListeningRef.current())
                   } else {
                     setAppPhase('awaiting_mode')
                     appPhaseRef.current = 'awaiting_mode'
                     speak(
                       `Hi ${userName}, what do you want to work on today? We can simply talk a topic out, work through something Socratically, or run an exam prep session.`
-                    ).then(() => startListeningRef.current())
+                    ).then(() => startListeningRef.current()).catch(() => startListeningRef.current())
                   }
                   return
                 }
