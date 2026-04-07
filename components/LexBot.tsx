@@ -565,7 +565,11 @@ export function LexBot() {
           body: JSON.stringify({ transcript }),
           signal: controller.signal,
         })
-        if (!res.ok) throw new Error(`classify ${res.status}`)
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}))
+          console.error('Classify API error:', res.status, errData.error || errData)
+          throw new Error(`classify ${res.status}: ${errData.error || 'unknown'}`)
+        }
         return res.json()
       } finally {
         clearTimeout(timeout)
