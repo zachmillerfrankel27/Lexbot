@@ -337,6 +337,9 @@ export function LexBot() {
         clearTimeout(chatTimeout)
 
         const data = await res.json()
+        if (!res.ok) {
+          console.error('Chat API error:', res.status, data.error || data)
+        }
         if (data.message) {
           setMessages((prev) => [
             ...prev,
