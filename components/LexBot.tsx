@@ -754,9 +754,14 @@ export function LexBot() {
                   } else {
                     setAppPhase('awaiting_mode')
                     appPhaseRef.current = 'awaiting_mode'
-                    speak(
-                      `Hi ${userName}, what do you want to work on today? We can simply talk a topic out, work through something Socratically, or run an exam prep session.`
-                    ).then(() => startListeningRef.current()).catch(() => startListeningRef.current())
+                    const returningGreetings = [
+                      `Hey ${userName}, what's on your mind?`,
+                      `Welcome back, ${userName}. What do you want to work on?`,
+                      `Hey ${userName}! What can I help you with?`,
+                      `What's going on, ${userName}?`,
+                    ]
+                    const greeting = returningGreetings[Math.floor(Math.random() * returningGreetings.length)]
+                    speak(greeting).then(() => startListeningRef.current()).catch(() => startListeningRef.current())
                   }
                   return
                 }
