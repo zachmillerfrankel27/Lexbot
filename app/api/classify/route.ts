@@ -38,6 +38,10 @@ Respond with valid JSON only — no extra text before or after:
 {"mode":"discussion"|"socratic"|"examprep","response":"..."}`
 
 export async function POST(req: NextRequest) {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return NextResponse.json({ error: 'ANTHROPIC_API_KEY is not configured' }, { status: 500 })
+  }
+
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown'
   if (isRateLimited(ip)) {
     return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
