@@ -298,7 +298,7 @@ export function LexBot() {
       }
 
       // Echo-clearing pause — still in 'speaking' state visually
-      await new Promise((r) => setTimeout(r, 900))
+      await new Promise((r) => setTimeout(r, 400))
     } finally {
       // Always release the lock and reset status, even if an error occurred
       isSpeakingRef.current = false
@@ -550,54 +550,25 @@ export function LexBot() {
       .catch(() => { if (selectedMode !== 'examprep') startListening() })
   }, [speak, startListening])
 
-  // ── AI-powered mode detection ──────────────────────────────────────────────
+  // ── Mode detection (local keyword matching — no API call) ─────────────────
 
-  const handleModeDetection = useCallback(async (transcript: string) => {
-    setStatus('thinking')
+  const handleModeDetection = useCallback((transcript: string) => {
+    const t = transcript.toLowerCase()
 
-    const tryClassify = async () => {
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 7000)
-      try {
-        const res = await fetch('/api/classify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ transcript }),
-          signal: controller.signal,
-        })
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}))
-          console.error('Classify API error:', res.status, errData.error || errData)
-          throw new Error(`classify ${res.status}: ${errData.error || 'unknown'}`)
-        }
-        return res.json()
-      } finally {
-        clearTimeout(timeout)
-      }
+    let detectedMode: Mode = 'discussion'
+    if (/\b(quiz|test me|ask me|question me|socratic|work through|challenge me|make me work)\b/.test(t)) {
+      detectedMode = 'socratic'
+    } else if (/\b(exam|practice exam|fact pattern|essay|hypo|hypothetical|prep|timed)\b/.test(t)) {
+      detectedMode = 'examprep'
     }
 
-    try {
-      // Try once, retry once on failure
-      let result
-      try {
-        result = await tryClassify()
-      } catch {
-        await new Promise((r) => setTimeout(r, 800))
-        result = await tryClassify()
-      }
-      const { mode: detectedMode, response: firstResponse } = result
-      selectMode(detectedMode as Mode, firstResponse)
-    } catch {
-      // Both classify attempts failed. Don't drop the user's question —
-      // set up discussion mode silently and answer what they actually said.
-      setMode('discussion')
-      modeRef.current = 'discussion'
-      setShowModeSelector(false)
-      setAppPhase('active')
-      appPhaseRef.current = 'active'
-      setMessages([])
-      handleUserMessageRef.current(transcript, 'discussion')
-    }
+    setMode(detectedMode)
+    modeRef.current = detectedMode
+    setShowModeSelector(false)
+    setAppPhase('active')
+    appPhaseRef.current = 'active'
+    setMessages([])
+    handleUserMessageRef.current(transcript, detectedMode)
   }, [selectMode])
 
   useEffect(() => { handleModeDetectionRef.current = handleModeDetection }, [handleModeDetection])
