@@ -632,7 +632,7 @@ export function LexBot() {
         if (data.message) {
           setFactPattern(data.message)
           setMessages((prev) => [...prev, { role: 'assistant', content: data.message }])
-          await speak(data.message)
+          await speak(`Here's your fact pattern. Take a moment to read it — when you're ready, walk me through the issues you spot.`)
           setExamStep('issuespotting')
           setShowIsDoneButton(true)
           startListeningRef.current()
@@ -799,9 +799,11 @@ export function LexBot() {
 
                 {/* Panel body */}
                 <div className="flex-1 overflow-y-auto px-5 py-5">
-                  <p className={`text-sm leading-relaxed ${THEME.docPanel.body}`}>
-                    {factPattern}
-                  </p>
+                  {factPattern.split('\n\n').filter(Boolean).map((para, i) => (
+                    <p key={i} className={`text-sm leading-relaxed mb-4 last:mb-0 ${THEME.docPanel.body}`}>
+                      {para.trim()}
+                    </p>
+                  ))}
                 </div>
 
                 {/* Panel footer hint */}
@@ -846,8 +848,10 @@ export function LexBot() {
           </p>
         )}
 
-        {/* Last response text */}
-        {(status === 'speaking' || (status === 'idle' && lastResponse)) && examStep !== 'writtenanswer' && (
+        {/* Last response text — hidden during exam prep when fact panel is visible */}
+        {(status === 'speaking' || (status === 'idle' && lastResponse))
+          && examStep !== 'writtenanswer'
+          && !(mode === 'examprep' && !!factPattern && examStep !== 'topic') && (
           <p className="text-gray-400 text-sm text-center max-w-xl leading-relaxed fade-up px-4">
             {lastResponse}
           </p>
