@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
           similarity_boost: 0.85,
           style: 0.0,
           use_speaker_boost: true,
-          speed: 0.9,
+          speed: 1.05,
         },
       }),
     })
