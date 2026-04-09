@@ -731,10 +731,10 @@ export function LexBot() {
       {(() => {
         const showPanel = mode === 'examprep' && !!factPattern && examStep !== 'topic'
         return (
-          <div className={`w-full flex-1 relative${showPanel ? ' flex flex-row' : ''}`}>
+          <div className={`w-full flex-1 relative${showPanel ? ' flex flex-col md:flex-row' : ''}`}>
 
             {/* Avatar area */}
-            <div className={showPanel ? 'flex-1 relative' : 'absolute inset-0'}>
+            <div className={showPanel ? 'h-56 md:h-auto md:flex-1 relative shrink-0' : 'absolute inset-0'}>
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
                 <div className={`w-72 h-72 rounded-full border transition-all duration-700 ${RING_CLASS[status]}`} />
               </div>
@@ -780,7 +780,7 @@ export function LexBot() {
 
             {/* Fact pattern side panel */}
             {showPanel && (
-              <div className={`w-[440px] shrink-0 flex flex-col border-l ${THEME.docPanel.border} ${THEME.docPanel.bg} pointer-events-auto z-20 overflow-hidden`}>
+              <div className={`w-full md:w-[400px] shrink-0 flex flex-col border-t md:border-t-0 md:border-l ${THEME.docPanel.border} ${THEME.docPanel.bg} pointer-events-auto z-20 overflow-hidden flex-1 md:flex-none`}>
                 {/* Panel header */}
                 <div className={`flex items-center justify-between px-5 py-3 border-b ${THEME.docPanel.border}`}>
                   <span
