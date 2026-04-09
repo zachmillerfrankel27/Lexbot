@@ -14,6 +14,37 @@ type ExamStep = 'topic' | 'factpattern' | 'issuespotting' | 'writtenanswer' | 'g
 type Message = { role: 'user' | 'assistant'; content: string }
 
 
+// ─── Theme — edit this object to rebrand the entire interface ─────────────────
+
+const THEME = {
+  // Voice state colors
+  status: {
+    idle:      { text: 'text-gray-500',   ring: 'border-gray-800 opacity-0' },
+    listening: { text: 'text-blue-400',   ring: 'ring-listening border-blue-500' },
+    thinking:  { text: 'text-purple-400', ring: 'ring-thinking border-purple-500' },
+    speaking:  { text: 'text-yellow-300', ring: 'ring-speaking border-yellow-400' },
+  },
+  // Brand accent — CTAs, selected state, download links
+  accentBtn:      'border-yellow-600 text-yellow-400 hover:bg-yellow-900 hover:bg-opacity-30',
+  accentSelected: 'border-yellow-500 bg-yellow-900 bg-opacity-20',
+  accentDownload: 'text-yellow-600 hover:text-yellow-400',
+  // Exam prep
+  examStep:   'text-purple-500',
+  submitBtn:  'bg-purple-900 border-purple-600 text-purple-200 hover:bg-purple-800',
+  // Conversation
+  transcript: 'text-blue-300',
+  userMsg:    'bg-blue-950 text-blue-200 border-blue-800',
+  // Fact pattern document panel
+  docPanel: {
+    border:   'border-amber-900',
+    bg:       'bg-gray-950',
+    header:   'text-amber-700',
+    download: 'text-amber-600 hover:text-amber-400',
+    hint:     'text-amber-900',
+    body:     'text-gray-200',
+  },
+}
+
 // ─── Status label & color helpers ─────────────────────────────────────────────
 
 const STATUS_LABEL: Record<Status, string> = {
@@ -24,17 +55,17 @@ const STATUS_LABEL: Record<Status, string> = {
 }
 
 const STATUS_COLOR: Record<Status, string> = {
-  idle: 'text-gray-500',
-  listening: 'text-blue-400',
-  thinking: 'text-purple-400',
-  speaking: 'text-yellow-300',
+  idle:      THEME.status.idle.text,
+  listening: THEME.status.listening.text,
+  thinking:  THEME.status.thinking.text,
+  speaking:  THEME.status.speaking.text,
 }
 
 const RING_CLASS: Record<Status, string> = {
-  idle: 'border-gray-800 opacity-0',
-  listening: 'ring-listening border-blue-500',
-  thinking: 'ring-thinking border-purple-500',
-  speaking: 'ring-speaking border-yellow-400',
+  idle:      THEME.status.idle.ring,
+  listening: THEME.status.listening.ring,
+  thinking:  THEME.status.thinking.ring,
+  speaking:  THEME.status.speaking.ring,
 }
 
 const MODE_LABELS: Record<Mode, string> = {
@@ -696,60 +727,103 @@ export function LexBot() {
         </button>
       )}
 
-      {/* 3D Canvas */}
-      <div className="w-full flex-1 relative">
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-          <div
-            className={`w-72 h-72 rounded-full border transition-all duration-700 ${RING_CLASS[status]}`}
-          />
-        </div>
+      {/* 3D Canvas + fact pattern side panel */}
+      {(() => {
+        const showPanel = mode === 'examprep' && !!factPattern && examStep !== 'topic'
+        return (
+          <div className={`w-full flex-1 relative${showPanel ? ' flex flex-row' : ''}`}>
 
-        <Canvas
-          camera={{ position: [0, 0, 5], fov: 30 }}
-          gl={{ antialias: true, alpha: true }}
-          style={{ background: 'transparent' }}
-        >
-          <Suspense fallback={null}>
-            <Avatar
-              isSpeaking={status === 'speaking'}
-              isListening={status === 'listening'}
-              isThinking={status === 'thinking'}
-              audioAmplitude={audioAmplitude}
-              onClick={() => {
-                if (!hasGreeted) {
-                  setHasGreeted(true)
-                  if (!userName) {
-                    setAppPhase('awaiting_name')
-                    appPhaseRef.current = 'awaiting_name'
-                    speak("Hi there — I'm Lex, your law tutor. What's your name?").then(() => startListeningRef.current()).catch(() => startListeningRef.current())
-                  } else {
-                    setAppPhase('awaiting_mode')
-                    appPhaseRef.current = 'awaiting_mode'
-                    const returningGreetings = [
-                      `Hey ${userName}, what's on your mind?`,
-                      `Welcome back, ${userName}. What do you want to work on?`,
-                      `Hey ${userName}! What can I help you with?`,
-                      `What's going on, ${userName}?`,
-                    ]
-                    const greeting = returningGreetings[Math.floor(Math.random() * returningGreetings.length)]
-                    speak(greeting).then(() => startListeningRef.current()).catch(() => startListeningRef.current())
-                  }
-                  return
-                }
-                if (mode === 'examprep' && examStep === 'writtenanswer') return
-                startListening()
-              }}
-            />
-          </Suspense>
-        </Canvas>
-      </div>
+            {/* Avatar area */}
+            <div className={showPanel ? 'flex-1 relative' : 'absolute inset-0'}>
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+                <div className={`w-72 h-72 rounded-full border transition-all duration-700 ${RING_CLASS[status]}`} />
+              </div>
+              <Canvas
+                camera={{ position: [0, 0, 5], fov: 30 }}
+                gl={{ antialias: true, alpha: true }}
+                style={{ background: 'transparent' }}
+              >
+                <Suspense fallback={null}>
+                  <Avatar
+                    isSpeaking={status === 'speaking'}
+                    isListening={status === 'listening'}
+                    isThinking={status === 'thinking'}
+                    audioAmplitude={audioAmplitude}
+                    onClick={() => {
+                      if (!hasGreeted) {
+                        setHasGreeted(true)
+                        if (!userName) {
+                          setAppPhase('awaiting_name')
+                          appPhaseRef.current = 'awaiting_name'
+                          speak("Hi there — I'm Lex, your law tutor. What's your name?").then(() => startListeningRef.current()).catch(() => startListeningRef.current())
+                        } else {
+                          setAppPhase('awaiting_mode')
+                          appPhaseRef.current = 'awaiting_mode'
+                          const returningGreetings = [
+                            `Hey ${userName}, what's on your mind?`,
+                            `Welcome back, ${userName}. What do you want to work on?`,
+                            `Hey ${userName}! What can I help you with?`,
+                            `What's going on, ${userName}?`,
+                          ]
+                          const greeting = returningGreetings[Math.floor(Math.random() * returningGreetings.length)]
+                          speak(greeting).then(() => startListeningRef.current()).catch(() => startListeningRef.current())
+                        }
+                        return
+                      }
+                      if (mode === 'examprep' && examStep === 'writtenanswer') return
+                      startListening()
+                    }}
+                  />
+                </Suspense>
+              </Canvas>
+            </div>
+
+            {/* Fact pattern side panel */}
+            {showPanel && (
+              <div className={`w-[440px] shrink-0 flex flex-col border-l ${THEME.docPanel.border} ${THEME.docPanel.bg} pointer-events-auto z-20 overflow-hidden`}>
+                {/* Panel header */}
+                <div className={`flex items-center justify-between px-5 py-3 border-b ${THEME.docPanel.border}`}>
+                  <span
+                    className={`text-[10px] uppercase tracking-[0.3em] font-light ${THEME.docPanel.header}`}
+                    style={{ fontFamily: "'Cinzel', Georgia, serif" }}
+                  >
+                    Fact Pattern
+                  </span>
+                  <button
+                    onClick={downloadFactPattern}
+                    className={`text-[10px] uppercase tracking-widest transition-colors ${THEME.docPanel.download}`}
+                  >
+                    ↓ Download
+                  </button>
+                </div>
+
+                {/* Panel body */}
+                <div className="flex-1 overflow-y-auto px-5 py-5">
+                  <p className={`text-sm leading-relaxed ${THEME.docPanel.body}`}>
+                    {factPattern}
+                  </p>
+                </div>
+
+                {/* Panel footer hint */}
+                {examStep === 'issuespotting' && (
+                  <div className={`px-5 py-3 border-t ${THEME.docPanel.border}`}>
+                    <p className={`text-[10px] uppercase tracking-widest ${THEME.docPanel.hint}`}>
+                      Spot the issues — talk through them out loud
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       {/* Bottom UI */}
       <div className="pb-4 flex flex-col items-center gap-3 z-10 w-full px-4">
 
         {/* Exam Prep step indicator */}
         {mode === 'examprep' && (
-          <p className="text-xs tracking-widest text-purple-500 uppercase">
+          <p className={`text-xs tracking-widest uppercase ${THEME.examStep}`}>
             {EXAM_STEP_LABELS[examStep]}
           </p>
         )}
@@ -767,7 +841,7 @@ export function LexBot() {
 
         {/* Live transcript */}
         {status === 'listening' && liveTranscript && (
-          <p className="text-blue-300 text-sm text-center max-w-lg opacity-80 fade-up italic">
+          <p className={`text-sm text-center max-w-lg opacity-80 fade-up italic ${THEME.transcript}`}>
             "{liveTranscript}"
           </p>
         )}
@@ -779,27 +853,11 @@ export function LexBot() {
           </p>
         )}
 
-        {/* Fact pattern display + download */}
-        {mode === 'examprep' && factPattern && examStep !== 'topic' && (
-          <div className="w-full max-w-2xl bg-gray-950 border border-gray-800 rounded-lg p-4 text-xs text-gray-300 leading-relaxed max-h-48 overflow-y-auto fade-up">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-[10px] uppercase tracking-widest text-gray-600">Fact Pattern</span>
-              <button
-                onClick={downloadFactPattern}
-                className="text-[10px] uppercase tracking-widest text-yellow-600 hover:text-yellow-400 transition-colors pointer-events-auto"
-              >
-                ↓ Download
-              </button>
-            </div>
-            {factPattern}
-          </div>
-        )}
-
         {/* "I'm Done" button (issue spotting) */}
         {showIsDoneButton && (
           <button
             onClick={handleIsDone}
-            className="pointer-events-auto px-6 py-2 text-xs uppercase tracking-widest border border-yellow-600 text-yellow-400 hover:bg-yellow-900 hover:bg-opacity-30 rounded-lg transition-all duration-200 fade-up"
+            className={`pointer-events-auto px-6 py-2 text-xs uppercase tracking-widest border rounded-lg transition-all duration-200 fade-up ${THEME.accentBtn}`}
           >
             I'm Done Spotting Issues →
           </button>
@@ -818,7 +876,7 @@ export function LexBot() {
             <button
               onClick={handleSubmitWrittenAnswer}
               disabled={!writtenAnswer.trim()}
-              className="self-end px-6 py-2 text-xs uppercase tracking-widest bg-purple-900 border border-purple-600 text-purple-200 hover:bg-purple-800 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-all duration-200"
+              className={`self-end px-6 py-2 text-xs uppercase tracking-widest border rounded-lg transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed ${THEME.submitBtn}`}
             >
               Submit for Grading →
             </button>
@@ -887,10 +945,10 @@ export function LexBot() {
                 className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[80%] text-xs leading-relaxed px-3 py-2 rounded-lg ${
+                  className={`max-w-[80%] text-xs leading-relaxed px-3 py-2 rounded-lg border ${
                     msg.role === 'user'
-                      ? 'bg-blue-950 text-blue-200 border border-blue-800'
-                      : 'bg-gray-950 text-gray-300 border border-gray-800'
+                      ? THEME.userMsg
+                      : 'bg-gray-950 text-gray-300 border-gray-800'
                   }`}
                 >
                   <span className="block text-[10px] uppercase tracking-widest opacity-50 mb-1">
@@ -925,7 +983,7 @@ export function LexBot() {
                 onClick={() => selectMode(m)}
                 className={`w-full text-left px-5 py-4 rounded-lg border transition-all duration-200 ${
                   mode === m
-                    ? 'border-yellow-500 bg-yellow-900 bg-opacity-20'
+                    ? THEME.accentSelected
                     : 'border-gray-800 hover:border-gray-600 bg-gray-950 hover:bg-gray-900'
                 }`}
               >
