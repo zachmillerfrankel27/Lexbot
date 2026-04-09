@@ -169,6 +169,7 @@ export function LexBot() {
   const [notesFileName, setNotesFileName] = useState('')
   const [showWrittenInput, setShowWrittenInput] = useState(false)
   const [showIsDoneButton, setShowIsDoneButton] = useState(false)
+  const [showFactPanel, setShowFactPanel] = useState(false)
 
   const statusRef = useRef<Status>('idle')
   const modeRef = useRef<Mode | null>(null)
@@ -567,6 +568,7 @@ export function LexBot() {
     setWrittenAnswer('')
     setShowWrittenInput(false)
     setShowIsDoneButton(false)
+    setShowFactPanel(false)
 
     const defaultGreetings: Record<Mode, string> = {
       discussion: "Discussion mode. What case or concept do you want to dig into?",
@@ -631,6 +633,7 @@ export function LexBot() {
         const data = await res.json()
         if (data.message) {
           setFactPattern(data.message)
+          setShowFactPanel(true)
           setMessages((prev) => [...prev, { role: 'assistant', content: data.message }])
           await speak(data.message)
           setExamStep('issuespotting')
@@ -728,13 +731,10 @@ export function LexBot() {
       )}
 
       {/* 3D Canvas + fact pattern side panel */}
-      {(() => {
-        const showPanel = mode === 'examprep' && !!factPattern && examStep !== 'topic'
-        return (
-          <div className={`w-full flex-1 relative${showPanel ? ' flex flex-col md:flex-row' : ''}`}>
+      <div className={`w-full flex-1 relative${showFactPanel ? ' flex flex-col md:flex-row' : ''}`}>
 
             {/* Avatar area */}
-            <div className={showPanel ? 'h-56 md:h-auto md:flex-1 relative shrink-0' : 'absolute inset-0'}>
+            <div className={showFactPanel ? 'h-56 md:h-auto md:flex-1 relative shrink-0' : 'absolute inset-0'}>
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
                 <div className={`w-72 h-72 rounded-full border transition-all duration-700 ${RING_CLASS[status]}`} />
               </div>
@@ -779,7 +779,7 @@ export function LexBot() {
             </div>
 
             {/* Fact pattern side panel */}
-            {showPanel && (
+            {showFactPanel && (
               <div className={`w-full md:w-[400px] shrink-0 flex flex-col border-t md:border-t-0 md:border-l ${THEME.docPanel.border} ${THEME.docPanel.bg} pointer-events-auto z-20 overflow-hidden flex-1 md:flex-none`}>
                 {/* Panel header */}
                 <div className={`flex items-center justify-between px-5 py-3 border-b ${THEME.docPanel.border}`}>
@@ -816,9 +816,7 @@ export function LexBot() {
                 )}
               </div>
             )}
-          </div>
-        )
-      })()}
+      </div>
 
       {/* Bottom UI */}
       <div className="pb-4 flex flex-col items-center gap-3 z-10 w-full px-4">
@@ -848,10 +846,10 @@ export function LexBot() {
           </p>
         )}
 
-        {/* Last response text — hidden during exam prep when fact panel is visible */}
+        {/* Last response text — hidden when fact panel is visible */}
         {(status === 'speaking' || (status === 'idle' && lastResponse))
           && examStep !== 'writtenanswer'
-          && !(mode === 'examprep' && !!factPattern && examStep !== 'topic') && (
+          && !showFactPanel && (
           <p className="text-gray-400 text-sm text-center max-w-xl leading-relaxed fade-up px-4">
             {lastResponse}
           </p>
