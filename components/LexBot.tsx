@@ -632,7 +632,7 @@ export function LexBot() {
         if (data.message) {
           setFactPattern(data.message)
           setMessages((prev) => [...prev, { role: 'assistant', content: data.message }])
-          await speak(`Here's your fact pattern. Take a moment to read it — when you're ready, walk me through the issues you spot.`)
+          await speak(data.message)
           setExamStep('issuespotting')
           setShowIsDoneButton(true)
           startListeningRef.current()
