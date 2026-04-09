@@ -799,9 +799,11 @@ export function LexBot() {
 
                 {/* Panel body */}
                 <div className="flex-1 overflow-y-auto px-5 py-5">
-                  <p className={`text-sm leading-relaxed ${THEME.docPanel.body}`}>
-                    {factPattern}
-                  </p>
+                  {factPattern.split('\n\n').filter(Boolean).map((para, i) => (
+                    <p key={i} className={`text-sm leading-relaxed mb-4 last:mb-0 ${THEME.docPanel.body}`}>
+                      {para.trim()}
+                    </p>
+                  ))}
                 </div>
 
                 {/* Panel footer hint */}
@@ -846,8 +848,10 @@ export function LexBot() {
           </p>
         )}
 
-        {/* Last response text */}
-        {(status === 'speaking' || (status === 'idle' && lastResponse)) && examStep !== 'writtenanswer' && (
+        {/* Last response text — hidden during exam prep when fact panel is visible */}
+        {(status === 'speaking' || (status === 'idle' && lastResponse))
+          && examStep !== 'writtenanswer'
+          && !(mode === 'examprep' && !!factPattern && examStep !== 'topic') && (
           <p className="text-gray-400 text-sm text-center max-w-xl leading-relaxed fade-up px-4">
             {lastResponse}
           </p>

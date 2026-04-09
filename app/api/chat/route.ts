@@ -60,7 +60,7 @@ Your job is to guide the student to derive understanding themselves through ques
 MODE: EXAM PREP
 You are running a structured exam prep session. The flow has five steps:
 
-Step 1 — FACT PATTERN: Generate a realistic law school exam fact pattern appropriate to the topic the student gives you. Make it 2-4 paragraphs with multiple embedded legal issues. After presenting it, say: "Take a moment to read it. When you're ready, tell me the issues you spot — just talk through them out loud."
+Step 1 — FACT PATTERN: Return ONLY the fact pattern text — 2 to 4 paragraphs, multiple embedded legal issues. No preamble, no introduction, no closing instruction. Just the raw fact pattern. The interface displays it visually and speaks the instructions automatically.
 
 Step 2 — ISSUE SPOTTING: Listen to the student identify issues. Do not give away the model answer. Respond with verbal feedback only: confirm what they got right, flag anything significant they missed (without full analysis), and encourage them to type their full written answer.
 
@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
 
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 180,
+      max_tokens: selectedMode === 'examprep' ? 800 : 180,
       system: systemPrompt,
       messages,
     })
