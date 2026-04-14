@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { messages, mode, notes } = await req.json()
+    const { messages, mode, notes, level } = await req.json()
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json({ error: 'Invalid messages format' }, { status: 400 })
@@ -93,6 +93,10 @@ export async function POST(req: NextRequest) {
 
     const selectedMode = mode && SYSTEM_PROMPTS[mode] ? mode : 'discussion'
     let systemPrompt = SYSTEM_PROMPTS[selectedMode]
+
+    if (level && typeof level === 'string' && level.trim() && selectedMode === 'examprep') {
+      systemPrompt += `\n\nSTUDENT LEVEL: ${level.trim()}. Calibrate fact pattern complexity, issue density, and analytical depth accordingly.`
+    }
 
     if (notes && notes.trim()) {
       systemPrompt += `\n\nSTUDENT NOTES/OUTLINE (use these to tailor fact patterns, flag coverage gaps, and calibrate grading — do not dump the full text back at the student, just reference relevant parts contextually):\n${notes.trim()}`

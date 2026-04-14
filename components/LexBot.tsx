@@ -9,7 +9,7 @@ import { Walkthrough, shouldShowWalkthrough } from './Walkthrough'
 
 type Status = 'idle' | 'listening' | 'thinking' | 'speaking'
 type Mode = 'discussion' | 'socratic' | 'examprep'
-type AppPhase = 'awaiting_name' | 'awaiting_mode' | 'active'
+type AppPhase = 'awaiting_name' | 'awaiting_mode' | 'awaiting_level' | 'active'
 type ExamStep = 'topic' | 'factpattern' | 'issuespotting' | 'writtenanswer' | 'grading' | 'done'
 type Message = { role: 'user' | 'assistant'; content: string }
 
@@ -170,12 +170,20 @@ export function LexBot() {
   const [showWrittenInput, setShowWrittenInput] = useState(false)
   const [showIsDoneButton, setShowIsDoneButton] = useState(false)
   const [showFactPanel, setShowFactPanel] = useState(false)
+  const [userLevel, setUserLevel] = useState<string>(() => {
+    if (typeof window === 'undefined') return ''
+    return localStorage.getItem('lexbot-level') ?? ''
+  })
+  const [showNotesPrompt, setShowNotesPrompt] = useState(false)
 
   const statusRef = useRef<Status>('idle')
   const modeRef = useRef<Mode | null>(null)
   const appPhaseRef = useRef<AppPhase>('active')
   const examStepRef = useRef<ExamStep>('topic')
   const lastExamTopicRef = useRef('')
+  const pendingTopicRef = useRef('')
+  const showNotesPromptRef = useRef(false)
+  const handleExamTopicVoiceRef = useRef<(topic: string) => Promise<void>>(() => Promise.resolve())
   const startListeningRef = useRef<() => void>(() => {})
   const handleModeDetectionRef = useRef<(transcript: string) => void>(() => {})
   const handleUserMessageRef = useRef<(text: string, overrideMode?: Mode) => Promise<void>>(() => Promise.resolve())
@@ -364,7 +372,7 @@ export function LexBot() {
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: newMessages, mode: activeMode, notes }),
+          body: JSON.stringify({ messages: newMessages, mode: activeMode, notes, level: userLevel }),
           signal: chatController.signal,
         })
         clearTimeout(chatTimeout)
@@ -436,11 +444,53 @@ export function LexBot() {
         return
       }
 
+      if (appPhaseRef.current === 'awaiting_level') {
+        const t = transcript.toLowerCase()
+        let level = ''
+        if (/\b(1l|first.?year|1st.?year|one l)\b/.test(t))   level = '1L'
+        else if (/\b(2l|second.?year|2nd.?year|two l)\b/.test(t)) level = '2L'
+        else if (/\b(3l|third.?year|3rd.?year|three l)\b/.test(t)) level = '3L'
+        else if (/\bbar\b/.test(t))                            level = 'Bar Prep'
+        else if (/\bllm\b/.test(t))                            level = 'LLM'
+        else                                                   level = transcript.trim().slice(0, 30)
+        if (level) {
+          setUserLevel(level)
+          try { localStorage.setItem('lexbot-level', level) } catch { /* ignore */ }
+        }
+        setAppPhase('active')
+        appPhaseRef.current = 'active'
+        const notesHint = notes.trim() ? '' : ' If you want to upload notes so I can tailor it to your class, use the button below.'
+        speak(`Got it.${notesHint} What topic or area of law should we work on?`)
+          .then(() => startListeningRef.current())
+          .catch(() => startListeningRef.current())
+        return
+      }
+
+      // Handle notes-upload decision if prompt is showing
+      if (showNotesPromptRef.current) {
+        const t = transcript.toLowerCase()
+        if (/\b(no|skip|nope|go|proceed|without|continue|just go)\b/.test(t)) {
+          setShowNotesPrompt(false)
+          showNotesPromptRef.current = false
+          handleExamTopicVoiceRef.current(pendingTopicRef.current)
+        }
+        // "yes/upload" → user must use the button (browser security requires user gesture for file input)
+        return
+      }
+
       // ── Normal conversation ────────────────────────────────────────────────
       if (modeRef.current === 'examprep') {
         const step = examStep
         if (step === 'topic') {
-          handleExamTopicVoice(transcript)
+          if (!notes.trim()) {
+            pendingTopicRef.current = transcript
+            setShowNotesPrompt(true)
+            showNotesPromptRef.current = true
+            speak("Before I start thinking of one, do you want to upload your notes or outline so I can tailor the question to your class?")
+              .then(() => startListeningRef.current())
+          } else {
+            handleExamTopicVoice(transcript)
+          }
           return
         }
         // Detect "give me another fact pattern" at any post-topic step
@@ -587,19 +637,37 @@ export function LexBot() {
     setShowWrittenInput(false)
     setShowIsDoneButton(false)
     setShowFactPanel(false)
+    setShowNotesPrompt(false)
+    showNotesPromptRef.current = false
+    pendingTopicRef.current = ''
 
     const defaultGreetings: Record<Mode, string> = {
       discussion: "Discussion mode. What case or concept do you want to dig into?",
       socratic: "Socratic mode. I won't give you answers — I'll ask questions until you find them yourself. What topic are we working on?",
-      examprep: "Exam prep mode. Give me a topic or a specific area of law and I'll generate a fact pattern for you.",
+      examprep: "Exam prep mode. Give me a topic or area of law and I'll generate a fact pattern for you.",
+    }
+
+    if (selectedMode === 'examprep' && !userLevel && !customGreeting) {
+      // One-time level setup — ask before anything else
+      speak("Exam prep mode. Quick one-time setup: what year are you in — first year, second, third, or are you studying for the bar?")
+        .then(() => {
+          setAppPhase('awaiting_level')
+          appPhaseRef.current = 'awaiting_level'
+          startListening()
+        })
+        .catch(() => {
+          setAppPhase('awaiting_level')
+          appPhaseRef.current = 'awaiting_level'
+          startListening()
+        })
+      return
     }
 
     const greeting = customGreeting ?? defaultGreetings[selectedMode]
-
     speak(greeting)
-      .then(() => { if (selectedMode !== 'examprep') startListening() })
-      .catch(() => { if (selectedMode !== 'examprep') startListening() })
-  }, [speak, startListening])
+      .then(() => startListening())
+      .catch(() => startListening())
+  }, [speak, startListening, userLevel, notes])
 
   // ── Mode detection (local keyword matching — no API call) ─────────────────
 
@@ -649,7 +717,7 @@ export function LexBot() {
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: newMessages, mode: 'examprep', notes }),
+          body: JSON.stringify({ messages: newMessages, mode: 'examprep', notes, level: userLevel }),
           signal: examController.signal,
         })
         clearTimeout(examTimeout)
@@ -672,8 +740,20 @@ export function LexBot() {
         startListeningRef.current()
       }
     },
-    [speak, notes]
+    [speak, notes, userLevel]
   )
+
+  // Keep handleExamTopicVoiceRef in sync so callbacks can call the latest version
+  useEffect(() => { handleExamTopicVoiceRef.current = handleExamTopicVoice }, [handleExamTopicVoice])
+
+  // Auto-proceed after notes are uploaded while the notes prompt is showing
+  useEffect(() => {
+    if (showNotesPromptRef.current && notes.trim()) {
+      setShowNotesPrompt(false)
+      showNotesPromptRef.current = false
+      handleExamTopicVoiceRef.current(pendingTopicRef.current)
+    }
+  }, [notes])
 
   const handleIsDone = useCallback(() => {
     setShowIsDoneButton(false)
@@ -722,7 +802,7 @@ export function LexBot() {
 
   return (
     <div
-      className="relative w-full h-screen flex flex-col items-center overflow-hidden select-none"
+      className={`relative w-full h-screen overflow-hidden select-none flex ${showFactPanel ? 'flex-row' : 'flex-col'}`}
       style={{
         background:
           'radial-gradient(ellipse at 50% 40%, #0d0a1e 0%, #040210 55%, #000000 100%)',
@@ -730,116 +810,78 @@ export function LexBot() {
     >
       <div className="scanline" />
 
-      {/* Title + mode indicator — z-30 ensures it renders above the fact panel */}
-      <div className="absolute top-6 left-0 right-0 flex flex-col items-center z-30 pointer-events-none">
-        <h1
-          className="text-2xl tracking-[0.3em] uppercase font-light text-gray-400"
-          style={{ fontFamily: "'Cinzel', Georgia, serif", letterSpacing: '0.35em' }}
-        >
-          L E X
-        </h1>
-        <p className="text-xs tracking-widest text-gray-700 uppercase mt-1">
-          {mode ? MODE_LABELS[mode] : 'AI Law Tutor'}
-        </p>
-      </div>
+      {/* ── Left column: avatar + UI (full width when no panel, flex-1 when panel shows) ── */}
+      <div className={`flex flex-col relative ${showFactPanel ? 'flex-1' : 'w-full flex-1'}`}>
 
-      {/* Mode selector button — hidden when fact panel is open (panel covers that area) */}
-      {hasGreeted && !showFactPanel && (
-        <button
-          className="absolute top-6 right-6 z-30 text-xs text-gray-600 hover:text-gray-400 tracking-widest uppercase transition-colors duration-200 pointer-events-auto"
-          onClick={() => setShowModeSelector(true)}
-        >
-          {mode ? '⟳ Mode' : 'Select Mode'}
-        </button>
-      )}
-
-      {/* 3D Canvas + fact pattern side panel */}
-      <div className="w-full flex-1 relative">
-
-        {/* Status ring — responsive size */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-          <div className={`w-56 h-56 sm:w-64 sm:h-64 md:w-72 md:h-72 rounded-full border transition-all duration-700 ${RING_CLASS[status]}`} />
+        {/* Title + mode indicator */}
+        <div className="absolute top-6 left-0 right-0 flex flex-col items-center z-30 pointer-events-none">
+          <h1
+            className="text-2xl tracking-[0.3em] uppercase font-light text-gray-400"
+            style={{ fontFamily: "'Cinzel', Georgia, serif", letterSpacing: '0.35em' }}
+          >
+            L E X
+          </h1>
+          <p className="text-xs tracking-widest text-gray-700 uppercase mt-1">
+            {mode ? MODE_LABELS[mode] : 'AI Law Tutor'}
+          </p>
         </div>
 
-        {/* Three.js canvas — explicitly fills its container */}
-        <Canvas
-          camera={{ position: [0, 0, 5], fov: 30 }}
-          gl={{ antialias: true, alpha: true }}
-          style={{ background: 'transparent', position: 'absolute', inset: 0, width: '100%', height: '100%' }}
-        >
-          <Suspense fallback={null}>
-            <Avatar
-              isSpeaking={status === 'speaking'}
-              isListening={status === 'listening'}
-              isThinking={status === 'thinking'}
-              audioAmplitude={audioAmplitude}
-              onClick={() => {
-                if (!hasGreeted) {
-                  setHasGreeted(true)
-                  if (!userName) {
-                    setAppPhase('awaiting_name')
-                    appPhaseRef.current = 'awaiting_name'
-                    speak("Hi there — I'm Lex, your law tutor. What's your name?").then(() => startListeningRef.current()).catch(() => startListeningRef.current())
-                  } else {
-                    setAppPhase('awaiting_mode')
-                    appPhaseRef.current = 'awaiting_mode'
-                    const returningGreetings = [
-                      `Hey ${userName}, what's on your mind?`,
-                      `Welcome back, ${userName}. What do you want to work on?`,
-                      `Hey ${userName}! What can I help you with?`,
-                      `What's going on, ${userName}?`,
-                    ]
-                    const greeting = returningGreetings[Math.floor(Math.random() * returningGreetings.length)]
-                    speak(greeting).then(() => startListeningRef.current()).catch(() => startListeningRef.current())
-                  }
-                  return
-                }
-                if (mode === 'examprep' && examStep === 'writtenanswer') return
-                startListening()
-              }}
-            />
-          </Suspense>
-        </Canvas>
-
-        {/* Fact pattern panel — overlays ONLY the canvas area, not title or bottom UI */}
-        {showFactPanel && (
-          <div className={`absolute right-0 top-0 bottom-0 w-[45%] max-w-[520px] min-w-[260px] z-20 flex flex-col border-l ${THEME.docPanel.border} ${THEME.docPanel.bg} pointer-events-auto`}>
-            {/* Header */}
-            <div className={`flex items-center justify-between px-5 py-3 border-b ${THEME.docPanel.border}`}>
-              <span
-                className={`text-[10px] uppercase tracking-[0.3em] font-light ${THEME.docPanel.header}`}
-                style={{ fontFamily: "'Cinzel', Georgia, serif" }}
-              >
-                Fact Pattern
-              </span>
-              <button
-                onClick={downloadFactPattern}
-                className={`text-[10px] uppercase tracking-widest transition-colors ${THEME.docPanel.download}`}
-              >
-                ↓ Download
-              </button>
-            </div>
-
-            {/* Body */}
-            <div className="flex-1 overflow-y-auto px-6 py-5">
-              {factPattern.split('\n\n').filter(Boolean).map((para, i) => (
-                <p key={i} className={`text-base leading-relaxed mb-5 last:mb-0 ${THEME.docPanel.body}`}>
-                  {para.trim()}
-                </p>
-              ))}
-            </div>
-
-            {/* Footer hint */}
-            {examStep === 'issuespotting' && (
-              <div className={`px-5 py-3 border-t ${THEME.docPanel.border}`}>
-                <p className={`text-[10px] uppercase tracking-widest ${THEME.docPanel.hint}`}>
-                  Spot the issues — talk through them out loud
-                </p>
-              </div>
-            )}
-          </div>
+        {/* Mode selector button */}
+        {hasGreeted && (
+          <button
+            className="absolute top-6 right-6 z-30 text-xs text-gray-600 hover:text-gray-400 tracking-widest uppercase transition-colors duration-200 pointer-events-auto"
+            onClick={() => setShowModeSelector(true)}
+          >
+            {mode ? '⟳ Mode' : 'Select Mode'}
+          </button>
         )}
-      </div>
+
+        {/* 3D Canvas */}
+        <div className="w-full flex-1 relative">
+          {/* Status ring — responsive size */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+            <div className={`w-56 h-56 sm:w-64 sm:h-64 md:w-72 md:h-72 rounded-full border transition-all duration-700 ${RING_CLASS[status]}`} />
+          </div>
+
+          <Canvas
+            camera={{ position: [0, 0, 5], fov: 30 }}
+            gl={{ antialias: true, alpha: true }}
+            style={{ background: 'transparent', position: 'absolute', inset: 0, width: '100%', height: '100%' }}
+          >
+            <Suspense fallback={null}>
+              <Avatar
+                isSpeaking={status === 'speaking'}
+                isListening={status === 'listening'}
+                isThinking={status === 'thinking'}
+                audioAmplitude={audioAmplitude}
+                onClick={() => {
+                  if (!hasGreeted) {
+                    setHasGreeted(true)
+                    if (!userName) {
+                      setAppPhase('awaiting_name')
+                      appPhaseRef.current = 'awaiting_name'
+                      speak("Hi there — I'm Lex, your law tutor. What's your name?").then(() => startListeningRef.current()).catch(() => startListeningRef.current())
+                    } else {
+                      setAppPhase('awaiting_mode')
+                      appPhaseRef.current = 'awaiting_mode'
+                      const returningGreetings = [
+                        `Hey ${userName}, what's on your mind?`,
+                        `Welcome back, ${userName}. What do you want to work on?`,
+                        `Hey ${userName}! What can I help you with?`,
+                        `What's going on, ${userName}?`,
+                      ]
+                      const greeting = returningGreetings[Math.floor(Math.random() * returningGreetings.length)]
+                      speak(greeting).then(() => startListeningRef.current()).catch(() => startListeningRef.current())
+                    }
+                    return
+                  }
+                  if (mode === 'examprep' && examStep === 'writtenanswer') return
+                  startListening()
+                }}
+              />
+            </Suspense>
+          </Canvas>
+        </div>
 
       {/* Bottom UI */}
       <div className="pb-4 flex flex-col items-center gap-3 z-10 w-full px-4">
@@ -908,7 +950,29 @@ export function LexBot() {
           </div>
         )}
 
-        {/* Notes upload */}
+        {/* Notes prompt — Upload / Skip buttons (shown after user gives topic with no notes loaded) */}
+        {showNotesPrompt && (
+          <div className="flex items-center gap-3 fade-up pointer-events-auto">
+            <button
+              onClick={() => notesInputRef.current?.click()}
+              className={`px-5 py-2 text-xs uppercase tracking-widest border rounded-lg transition-all duration-200 ${THEME.accentBtn}`}
+            >
+              Upload Notes
+            </button>
+            <button
+              onClick={() => {
+                setShowNotesPrompt(false)
+                showNotesPromptRef.current = false
+                handleExamTopicVoiceRef.current(pendingTopicRef.current)
+              }}
+              className="px-4 py-2 text-xs uppercase tracking-widest text-gray-500 hover:text-gray-300 transition-colors"
+            >
+              Skip →
+            </button>
+          </div>
+        )}
+
+        {/* Notes upload (hidden file input + subtle button while in topic/factpattern steps) */}
         {mode === 'examprep' && (examStep === 'topic' || examStep === 'factpattern') && (
           <div className="flex items-center gap-2 pointer-events-auto">
             <input
@@ -957,38 +1021,78 @@ export function LexBot() {
         )}
       </div>
 
-      {/* Conversation history panel */}
-      {showHistory && messages.length > 0 && (
-        <div
-          className="absolute bottom-0 left-0 right-0 h-64 z-20 flex flex-col pointer-events-auto"
-          style={{ background: 'linear-gradient(to top, #000000ee, #000000bb, transparent)' }}
-        >
-          <div className="flex-1 overflow-y-auto chat-history px-6 py-4 space-y-3">
-            {messages.map((msg, i) => (
-              <div
-                key={i}
-                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
+        {/* Conversation history panel — inside left column */}
+        {showHistory && messages.length > 0 && (
+          <div
+            className="absolute bottom-0 left-0 right-0 h-64 z-20 flex flex-col pointer-events-auto"
+            style={{ background: 'linear-gradient(to top, #000000ee, #000000bb, transparent)' }}
+          >
+            <div className="flex-1 overflow-y-auto chat-history px-6 py-4 space-y-3">
+              {messages.map((msg, i) => (
                 <div
-                  className={`max-w-[80%] text-xs leading-relaxed px-3 py-2 rounded-lg border ${
-                    msg.role === 'user'
-                      ? THEME.userMsg
-                      : 'bg-gray-950 text-gray-300 border-gray-800'
-                  }`}
+                  key={i}
+                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
-                  <span className="block text-[10px] uppercase tracking-widest opacity-50 mb-1">
-                    {msg.role === 'user' ? 'You' : 'Lex'}
-                  </span>
-                  {msg.content}
+                  <div
+                    className={`max-w-[80%] text-xs leading-relaxed px-3 py-2 rounded-lg border ${
+                      msg.role === 'user'
+                        ? THEME.userMsg
+                        : 'bg-gray-950 text-gray-300 border-gray-800'
+                    }`}
+                  >
+                    <span className="block text-[10px] uppercase tracking-widest opacity-50 mb-1">
+                      {msg.role === 'user' ? 'You' : 'Lex'}
+                    </span>
+                    {msg.content}
+                  </div>
                 </div>
-              </div>
-            ))}
-            <div ref={chatEndRef} />
+              ))}
+              <div ref={chatEndRef} />
+            </div>
           </div>
+        )}
+      </div>{/* end left column */}
+
+      {/* ── Right column: fact pattern panel (full screen height) ── */}
+      {showFactPanel && (
+        <div className={`w-[42%] max-w-[520px] min-w-[260px] flex flex-col border-l ${THEME.docPanel.border} ${THEME.docPanel.bg} pointer-events-auto`}>
+          {/* Header */}
+          <div className={`flex items-center justify-between px-5 py-3 border-b ${THEME.docPanel.border}`}>
+            <span
+              className={`text-[10px] uppercase tracking-[0.3em] font-light ${THEME.docPanel.header}`}
+              style={{ fontFamily: "'Cinzel', Georgia, serif" }}
+            >
+              Fact Pattern
+            </span>
+            <button
+              onClick={downloadFactPattern}
+              className={`text-[10px] uppercase tracking-widest transition-colors ${THEME.docPanel.download}`}
+            >
+              ↓ Download
+            </button>
+          </div>
+
+          {/* Body */}
+          <div className="flex-1 overflow-y-auto px-6 py-5">
+            {factPattern.split('\n\n').filter(Boolean).map((para, i) => (
+              <p key={i} className={`text-base leading-relaxed mb-5 last:mb-0 ${THEME.docPanel.body}`}>
+                {para.trim()}
+              </p>
+            ))}
+          </div>
+
+          {/* Footer hint */}
+          {examStep === 'issuespotting' && (
+            <div className={`px-5 py-3 border-t ${THEME.docPanel.border}`}>
+              <p className={`text-[10px] uppercase tracking-widest ${THEME.docPanel.hint}`}>
+                Spot the issues — talk through them out loud
+              </p>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Mode selector modal */}
+      {/* Mode selector modal — absolute over entire container (both columns) */}
       {showModeSelector && (
         <div
           className="absolute inset-0 z-30 flex items-center justify-center pointer-events-auto"
