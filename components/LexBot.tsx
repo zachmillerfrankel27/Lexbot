@@ -631,7 +631,10 @@ export function LexBot() {
       if (!isActive) return
       // Chrome sometimes closes the recognition session immediately or after a very
       // brief window with no speech detected, without firing a no-speech error first.
-      // Auto-restart so the user doesn't have to tap again.
+      // Update the ref directly (not just via setStatus) so startListening sees
+      // 'idle' immediately when the restart timer fires — avoids a race where
+      // the React state update hasn't propagated to the ref yet.
+      statusRef.current = 'idle'
       setStatus('idle')
       setTimeout(() => startListeningRef.current(), 150)
     }
