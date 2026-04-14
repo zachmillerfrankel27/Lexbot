@@ -181,6 +181,7 @@ export function LexBot() {
   const modeRef = useRef<Mode | null>(null)
   const appPhaseRef = useRef<AppPhase>('active')
   const examStepRef = useRef<ExamStep>('topic')
+  const notesRef = useRef<string>('')
   const lastExamTopicRef = useRef('')
   const pendingTopicRef = useRef('')
   const showNotesPromptRef = useRef(false)
@@ -204,6 +205,7 @@ export function LexBot() {
   useEffect(() => { messagesRef.current = messages }, [messages])
   useEffect(() => { appPhaseRef.current = appPhase }, [appPhase])
   useEffect(() => { examStepRef.current = examStep }, [examStep])
+  useEffect(() => { notesRef.current = notes }, [notes])
 
   // Persist chat history to localStorage
   useEffect(() => {
@@ -386,7 +388,7 @@ export function LexBot() {
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: newMessages, mode: activeMode, notes, level: userLevel }),
+          body: JSON.stringify({ messages: newMessages, mode: activeMode, notes: notesRef.current, level: userLevel }),
           signal: chatController.signal,
         })
         clearTimeout(chatTimeout)
@@ -418,7 +420,7 @@ export function LexBot() {
         startListeningRef.current()
       }
     },
-    [speak, notes]
+    [speak]
   )
 
   // Keep handleUserMessageRef in sync so it can be called from mode detection
@@ -473,7 +475,7 @@ export function LexBot() {
         }
         setAppPhase('active')
         appPhaseRef.current = 'active'
-        const notesHint = notes.trim() ? '' : ' If you want to upload notes so I can tailor it to your class, use the button below.'
+        const notesHint = notesRef.current.trim() ? '' : ' If you want to upload notes so I can tailor it to your class, use the button below.'
         speak(`Got it.${notesHint} What topic or area of law should we work on?`)
           .then(() => startListeningRef.current())
           .catch(() => startListeningRef.current())
@@ -494,16 +496,16 @@ export function LexBot() {
 
       // ── Normal conversation ────────────────────────────────────────────────
       if (modeRef.current === 'examprep') {
-        const step = examStep
+        const step = examStepRef.current
         if (step === 'topic') {
-          if (!notes.trim()) {
+          if (!notesRef.current.trim()) {
             pendingTopicRef.current = transcript
             setShowNotesPrompt(true)
             showNotesPromptRef.current = true
             speak("Before I start thinking of one, do you want to upload your notes or outline so I can tailor the question to your class?")
               .then(() => startListeningRef.current())
           } else {
-            handleExamTopicVoice(transcript)
+            handleExamTopicVoiceRef.current(transcript)
           }
           return
         }
@@ -531,8 +533,7 @@ export function LexBot() {
       }
       handleUserMessage(transcript)
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [examStep, handleUserMessage]
+    [handleUserMessage]
   )
 
   const startListening = useCallback(() => {
@@ -690,7 +691,7 @@ export function LexBot() {
     speak(greeting)
       .then(() => startListeningRef.current())
       .catch(() => startListeningRef.current())
-  }, [speak, startListening, userLevel, notes])
+  }, [speak])
 
   // ── Mode detection (local keyword matching — no API call) ─────────────────
 
@@ -748,7 +749,7 @@ export function LexBot() {
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: newMessages, mode: 'examprep', notes, level: userLevel }),
+          body: JSON.stringify({ messages: newMessages, mode: 'examprep', notes: notesRef.current, level: userLevel }),
           signal: examController.signal,
         })
         clearTimeout(examTimeout)
@@ -771,7 +772,7 @@ export function LexBot() {
         startListeningRef.current()
       }
     },
-    [speak, notes, userLevel]
+    [speak, userLevel]
   )
 
   // Keep handleExamTopicVoiceRef in sync so callbacks can call the latest version
