@@ -138,6 +138,7 @@ export function LexBot() {
   const [audioAmplitude, setAudioAmplitude] = useState(0)
   const [liveTranscript, setLiveTranscript] = useState('')
   const [lastResponse, setLastResponse] = useState('')
+  const [micError, setMicError] = useState('')
   const [showHistory, setShowHistory] = useState(false)
   const [hasGreeted, setHasGreeted] = useState(false)
   const [showWalkthrough, setShowWalkthrough] = useState(false)
@@ -281,7 +282,17 @@ export function LexBot() {
           }
 
           await new Promise<void>((resolve) => {
+            // Safety net: if onended never fires (known Chrome Web Audio edge case),
+            // resolve after the audio duration + a 3s buffer so speak() never hangs.
+            const safetyMs = Math.ceil(audioBuffer.duration * 1000) + 3000
+            const safetyTimer = setTimeout(() => {
+              isSpeakingRef.current = false
+              audioSourceRef.current = null
+              setAudioAmplitude(0)
+              resolve()
+            }, safetyMs)
             source.onended = () => {
+              clearTimeout(safetyTimer)
               isSpeakingRef.current = false
               audioSourceRef.current = null
               setAudioAmplitude(0)
@@ -558,6 +569,7 @@ export function LexBot() {
     recognition.onstart = () => {
       setStatus('listening')
       setLiveTranscript('')
+      setMicError('')
     }
 
     // Track whether this recognition instance already delivered a final result,
@@ -589,6 +601,14 @@ export function LexBot() {
         setTimeout(() => startListeningRef.current(), 200)
         return
       }
+      // Microphone access denied — show a visible hint so the user isn't
+      // left wondering why nothing happened.
+      if (event.error === 'not-allowed') {
+        setMicError('Microphone access is required. Allow it in your browser, then click the avatar to try again.')
+        setStatus('idle')
+        setLiveTranscript('')
+        return
+      }
       // Same guard as no-speech: if this instance was already superseded
       // (e.g. the defensive stop in startListening fired an 'aborted' error
       // on the old instance after the new one started), don't clobber the
@@ -615,8 +635,15 @@ export function LexBot() {
       try { recognitionRef.current.stop() } catch { /* ignore */ }
       recognitionRef.current = null
     }
-    recognition.start()
-    recognitionRef.current = recognition
+    try {
+      recognition.start()
+      recognitionRef.current = recognition
+    } catch (err) {
+      // Synchronous throw — mic already denied or unavailable
+      console.warn('SpeechRecognition.start() threw:', err)
+      setMicError('Microphone access is required. Allow it in your browser, then click the avatar to try again.')
+      setStatus('idle')
+    }
   }, [handleVoiceResult])
 
   // Keep startListeningRef in sync so handleVoiceResult can call it without a circular dep
@@ -893,16 +920,25 @@ export function LexBot() {
           </p>
         )}
 
+        {/* Mic error — shown when browser blocks microphone access */}
+        {micError && (
+          <p className="text-red-400 text-xs text-center max-w-sm fade-up leading-relaxed">
+            {micError}
+          </p>
+        )}
+
         {/* Status label */}
-        <p
-          className={`text-sm tracking-[0.2em] uppercase font-light transition-colors duration-500 ${STATUS_COLOR[status]}`}
-        >
-          {mode === 'examprep' && examStep === 'writtenanswer'
-            ? 'Type your answer below'
-            : status === 'idle' && hasGreeted
-            ? ''
-            : STATUS_LABEL[status]}
-        </p>
+        {!micError && (
+          <p
+            className={`text-sm tracking-[0.2em] uppercase font-light transition-colors duration-500 ${STATUS_COLOR[status]}`}
+          >
+            {mode === 'examprep' && examStep === 'writtenanswer'
+              ? 'Type your answer below'
+              : status === 'idle' && hasGreeted
+              ? ''
+              : STATUS_LABEL[status]}
+          </p>
+        )}
 
         {/* Live transcript */}
         {status === 'listening' && liveTranscript && (
