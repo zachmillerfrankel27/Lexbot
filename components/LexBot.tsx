@@ -572,10 +572,11 @@ export function LexBot() {
       setMicError('')
     }
 
-    // Track whether this recognition instance already delivered a final result,
-    // or was deliberately stopped by speak(). Both cases mean onend should NOT
-    // reset status to idle — the caller manages status from that point.
+    // handledByResult — set when a final transcript was delivered to handleVoiceResult
+    // errorHandled   — set when onerror already scheduled a restart or showed an error,
+    //                  so onend doesn't also try to restart (preventing double-restart)
     let handledByResult = false
+    let errorHandled = false
 
     recognition.onresult = (event) => {
       let transcript = ''
@@ -594,8 +595,7 @@ export function LexBot() {
         // Bail out if speak() has already taken over — restarting now would
         // open the mic while TTS audio is still playing, causing echo.
         if (recognitionRef.current !== recognition) return
-        // Mic timed out with no input — silently restart so the user doesn't
-        // have to tap again just because they paused before speaking.
+        errorHandled = true
         setStatus('idle')
         setLiveTranscript('')
         setTimeout(() => startListeningRef.current(), 200)
@@ -604,6 +604,7 @@ export function LexBot() {
       // Microphone access denied — show a visible hint so the user isn't
       // left wondering why nothing happened.
       if (event.error === 'not-allowed') {
+        errorHandled = true
         setMicError('Microphone access is required. Allow it in your browser, then click the avatar to try again.')
         setStatus('idle')
         setLiveTranscript('')
@@ -614,20 +615,25 @@ export function LexBot() {
       // on the old instance after the new one started), don't clobber the
       // new recognition's 'listening' status.
       if (recognitionRef.current !== recognition) return
+      errorHandled = true
       if (event.error !== 'aborted') console.warn('Speech recognition error:', event.error)
       setStatus('idle')
       setLiveTranscript('')
     }
 
     recognition.onend = () => {
-      // Only reset to idle if:
-      // 1. No final result was handled (handleVoiceResult manages status after a result), AND
-      // 2. This is still the active recognition (speak() nulls recognitionRef when it stops one)
-      if (!handledByResult && recognitionRef.current === recognition && statusRef.current === 'listening') {
-        setStatus('idle')
-      }
-      // Clear the ref so speak() doesn't call .stop() on this already-ended instance
-      if (recognitionRef.current === recognition) recognitionRef.current = null
+      const isActive = recognitionRef.current === recognition
+      // Always clear the ref — speak() shouldn't try to stop an already-ended instance
+      if (isActive) recognitionRef.current = null
+      // If result or error already handled state, do nothing
+      if (handledByResult || errorHandled) return
+      // If superseded by a newer recognition instance, do nothing
+      if (!isActive) return
+      // Chrome sometimes closes the recognition session immediately or after a very
+      // brief window with no speech detected, without firing a no-speech error first.
+      // Auto-restart so the user doesn't have to tap again.
+      setStatus('idle')
+      setTimeout(() => startListeningRef.current(), 150)
     }
 
     // Stop any leftover recognition before starting a fresh instance
