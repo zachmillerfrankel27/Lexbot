@@ -731,6 +731,7 @@ export function LexBot() {
     async (topic: string) => {
       lastExamTopicRef.current = topic
       setExamStep('factpattern')
+      examStepRef.current = 'factpattern'
       setLiveTranscript('')
 
       // Brief spoken cue while the API generates the fact pattern
@@ -759,8 +760,10 @@ export function LexBot() {
           setFactPattern(data.message)
           setShowFactPanel(true)
           setMessages((prev) => [...prev, { role: 'assistant', content: data.message }])
+          await speak("Here's your fact pattern. Spot all the issues you can — and don't worry about full analysis just yet.")
           await speak(data.message)
           setExamStep('issuespotting')
+          examStepRef.current = 'issuespotting'
           setShowIsDoneButton(true)
           startListeningRef.current()
         } else {
