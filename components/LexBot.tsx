@@ -366,6 +366,9 @@ export function LexBot() {
     async (text: string, overrideMode?: Mode) => {
       if (!text.trim()) return
 
+      // Update ref immediately (not just via setStatus) so onend can check
+      // synchronously and not restart recognition while the API is in flight.
+      statusRef.current = 'thinking'
       setStatus('thinking')
       setLiveTranscript('')
 
@@ -507,7 +510,7 @@ export function LexBot() {
         // Detect "give me another fact pattern" at any post-topic step
         if (
           step !== 'writtenanswer' && step !== 'grading' &&
-          /\b(another|one more|go again|give me a new|new one|different one|new fact pattern|another hypo)\b/i.test(transcript)
+          /\b(go again|give me a new|new fact pattern|another fact pattern|different fact pattern|another hypo|another question|try another|start over|reset)\b/i.test(transcript)
         ) {
           const recap = lastExamTopicRef.current
             ? `, or keep it in the same area as the last one on ${lastExamTopicRef.current}`
@@ -629,11 +632,11 @@ export function LexBot() {
       if (handledByResult || errorHandled) return
       // If superseded by a newer recognition instance, do nothing
       if (!isActive) return
-      // Chrome sometimes closes the recognition session immediately or after a very
-      // brief window with no speech detected, without firing a no-speech error first.
-      // Update the ref directly (not just via setStatus) so startListening sees
-      // 'idle' immediately when the restart timer fires — avoids a race where
-      // the React state update hasn't propagated to the ref yet.
+      // Don't restart while the API is processing or TTS is playing —
+      // handleUserMessage / speak() will restart listening when ready.
+      if (statusRef.current === 'thinking' || statusRef.current === 'speaking') return
+      // Chrome sometimes closes the session early without a no-speech error.
+      // Auto-restart so the user doesn't have to tap again.
       statusRef.current = 'idle'
       setStatus('idle')
       setTimeout(() => startListeningRef.current(), 150)
@@ -681,22 +684,6 @@ export function LexBot() {
       discussion: "Discussion mode. What case or concept do you want to dig into?",
       socratic: "Socratic mode. I won't give you answers — I'll ask questions until you find them yourself. What topic are we working on?",
       examprep: "Exam prep mode. Give me a topic or area of law and I'll generate a fact pattern for you.",
-    }
-
-    if (selectedMode === 'examprep' && !userLevel && !customGreeting) {
-      // One-time level setup — ask before anything else
-      speak("Exam prep mode. Quick one-time setup: what year are you in — first year, second, third, or are you studying for the bar?")
-        .then(() => {
-          setAppPhase('awaiting_level')
-          appPhaseRef.current = 'awaiting_level'
-          startListening()
-        })
-        .catch(() => {
-          setAppPhase('awaiting_level')
-          appPhaseRef.current = 'awaiting_level'
-          startListening()
-        })
-      return
     }
 
     const greeting = customGreeting ?? defaultGreetings[selectedMode]
