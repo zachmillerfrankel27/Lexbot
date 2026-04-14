@@ -688,8 +688,8 @@ export function LexBot() {
 
     const greeting = customGreeting ?? defaultGreetings[selectedMode]
     speak(greeting)
-      .then(() => startListening())
-      .catch(() => startListening())
+      .then(() => startListeningRef.current())
+      .catch(() => startListeningRef.current())
   }, [speak, startListening, userLevel, notes])
 
   // ── Mode detection (local keyword matching — no API call) ─────────────────
