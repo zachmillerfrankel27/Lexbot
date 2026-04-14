@@ -611,8 +611,12 @@ export function LexBot() {
   const handleExamTopicVoice = useCallback(
     async (topic: string) => {
       setExamStep('factpattern')
-      setStatus('thinking')
       setLiveTranscript('')
+
+      // Brief spoken cue while the API generates the fact pattern
+      await speak('Sure, give me just a couple of seconds to put one together.')
+      setLastResponse('')  // spoken only — don't leave it on screen
+      setStatus('thinking')
 
       const newMessages: Message[] = [
         ...messagesRef.current,
@@ -730,93 +734,89 @@ export function LexBot() {
         </button>
       )}
 
-      {/* 3D Canvas + fact pattern side panel */}
-      <div className={`w-full flex-1 relative${showFactPanel ? ' flex flex-col md:flex-row' : ''}`}>
-
-            {/* Avatar area */}
-            <div className={showFactPanel ? 'h-56 md:h-auto md:flex-1 relative shrink-0' : 'absolute inset-0'}>
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-                <div className={`w-72 h-72 rounded-full border transition-all duration-700 ${RING_CLASS[status]}`} />
-              </div>
-              <Canvas
-                camera={{ position: [0, 0, 5], fov: 30 }}
-                gl={{ antialias: true, alpha: true }}
-                style={{ background: 'transparent' }}
-              >
-                <Suspense fallback={null}>
-                  <Avatar
-                    isSpeaking={status === 'speaking'}
-                    isListening={status === 'listening'}
-                    isThinking={status === 'thinking'}
-                    audioAmplitude={audioAmplitude}
-                    onClick={() => {
-                      if (!hasGreeted) {
-                        setHasGreeted(true)
-                        if (!userName) {
-                          setAppPhase('awaiting_name')
-                          appPhaseRef.current = 'awaiting_name'
-                          speak("Hi there — I'm Lex, your law tutor. What's your name?").then(() => startListeningRef.current()).catch(() => startListeningRef.current())
-                        } else {
-                          setAppPhase('awaiting_mode')
-                          appPhaseRef.current = 'awaiting_mode'
-                          const returningGreetings = [
-                            `Hey ${userName}, what's on your mind?`,
-                            `Welcome back, ${userName}. What do you want to work on?`,
-                            `Hey ${userName}! What can I help you with?`,
-                            `What's going on, ${userName}?`,
-                          ]
-                          const greeting = returningGreetings[Math.floor(Math.random() * returningGreetings.length)]
-                          speak(greeting).then(() => startListeningRef.current()).catch(() => startListeningRef.current())
-                        }
-                        return
-                      }
-                      if (mode === 'examprep' && examStep === 'writtenanswer') return
-                      startListening()
-                    }}
-                  />
-                </Suspense>
-              </Canvas>
-            </div>
-
-            {/* Fact pattern side panel */}
-            {showFactPanel && (
-              <div className={`w-full md:w-[400px] shrink-0 flex flex-col border-t md:border-t-0 md:border-l ${THEME.docPanel.border} ${THEME.docPanel.bg} pointer-events-auto z-20 overflow-hidden flex-1 md:flex-none`}>
-                {/* Panel header */}
-                <div className={`flex items-center justify-between px-5 py-3 border-b ${THEME.docPanel.border}`}>
-                  <span
-                    className={`text-[10px] uppercase tracking-[0.3em] font-light ${THEME.docPanel.header}`}
-                    style={{ fontFamily: "'Cinzel', Georgia, serif" }}
-                  >
-                    Fact Pattern
-                  </span>
-                  <button
-                    onClick={downloadFactPattern}
-                    className={`text-[10px] uppercase tracking-widest transition-colors ${THEME.docPanel.download}`}
-                  >
-                    ↓ Download
-                  </button>
-                </div>
-
-                {/* Panel body */}
-                <div className="flex-1 overflow-y-auto px-5 py-5">
-                  {factPattern.split('\n\n').filter(Boolean).map((para, i) => (
-                    <p key={i} className={`text-sm leading-relaxed mb-4 last:mb-0 ${THEME.docPanel.body}`}>
-                      {para.trim()}
-                    </p>
-                  ))}
-                </div>
-
-                {/* Panel footer hint */}
-                {examStep === 'issuespotting' && (
-                  <div className={`px-5 py-3 border-t ${THEME.docPanel.border}`}>
-                    <p className={`text-[10px] uppercase tracking-widest ${THEME.docPanel.hint}`}>
-                      Spot the issues — talk through them out loud
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
+      {/* 3D Canvas */}
+      <div className="w-full flex-1 relative">
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+          <div className={`w-72 h-72 rounded-full border transition-all duration-700 ${RING_CLASS[status]}`} />
+        </div>
+        <Canvas
+          camera={{ position: [0, 0, 5], fov: 30 }}
+          gl={{ antialias: true, alpha: true }}
+          style={{ background: 'transparent' }}
+        >
+          <Suspense fallback={null}>
+            <Avatar
+              isSpeaking={status === 'speaking'}
+              isListening={status === 'listening'}
+              isThinking={status === 'thinking'}
+              audioAmplitude={audioAmplitude}
+              onClick={() => {
+                if (!hasGreeted) {
+                  setHasGreeted(true)
+                  if (!userName) {
+                    setAppPhase('awaiting_name')
+                    appPhaseRef.current = 'awaiting_name'
+                    speak("Hi there — I'm Lex, your law tutor. What's your name?").then(() => startListeningRef.current()).catch(() => startListeningRef.current())
+                  } else {
+                    setAppPhase('awaiting_mode')
+                    appPhaseRef.current = 'awaiting_mode'
+                    const returningGreetings = [
+                      `Hey ${userName}, what's on your mind?`,
+                      `Welcome back, ${userName}. What do you want to work on?`,
+                      `Hey ${userName}! What can I help you with?`,
+                      `What's going on, ${userName}?`,
+                    ]
+                    const greeting = returningGreetings[Math.floor(Math.random() * returningGreetings.length)]
+                    speak(greeting).then(() => startListeningRef.current()).catch(() => startListeningRef.current())
+                  }
+                  return
+                }
+                if (mode === 'examprep' && examStep === 'writtenanswer') return
+                startListening()
+              }}
+            />
+          </Suspense>
+        </Canvas>
       </div>
+
+      {/* Fact pattern side panel — absolute overlay, doesn't disturb canvas */}
+      {showFactPanel && (
+        <div className={`absolute right-0 top-0 bottom-0 w-[42%] max-w-[480px] min-w-[280px] z-30 flex flex-col border-l ${THEME.docPanel.border} ${THEME.docPanel.bg} pointer-events-auto`}>
+          {/* Header */}
+          <div className={`flex items-center justify-between px-5 py-3 border-b ${THEME.docPanel.border}`}>
+            <span
+              className={`text-[10px] uppercase tracking-[0.3em] font-light ${THEME.docPanel.header}`}
+              style={{ fontFamily: "'Cinzel', Georgia, serif" }}
+            >
+              Fact Pattern
+            </span>
+            <button
+              onClick={downloadFactPattern}
+              className={`text-[10px] uppercase tracking-widest transition-colors ${THEME.docPanel.download}`}
+            >
+              ↓ Download
+            </button>
+          </div>
+
+          {/* Body */}
+          <div className="flex-1 overflow-y-auto px-5 py-5">
+            {factPattern.split('\n\n').filter(Boolean).map((para, i) => (
+              <p key={i} className={`text-sm text-left leading-relaxed mb-4 last:mb-0 ${THEME.docPanel.body}`}>
+                {para.trim()}
+              </p>
+            ))}
+          </div>
+
+          {/* Footer hint */}
+          {examStep === 'issuespotting' && (
+            <div className={`px-5 py-3 border-t ${THEME.docPanel.border}`}>
+              <p className={`text-[10px] uppercase tracking-widest ${THEME.docPanel.hint}`}>
+                Spot the issues — talk through them out loud
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Bottom UI */}
       <div className="pb-4 flex flex-col items-center gap-3 z-10 w-full px-4">
