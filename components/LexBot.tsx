@@ -717,6 +717,14 @@ export function LexBot() {
       detectedMode = 'examprep'
     }
 
+    // Exam prep has a structured setup flow (level question → topic → notes prompt →
+    // fact pattern panel). Routing the raw transcript through handleUserMessage skips
+    // all of that, so we hand off to selectMode instead.
+    if (detectedMode === 'examprep') {
+      selectMode('examprep')
+      return
+    }
+
     setMode(detectedMode)
     modeRef.current = detectedMode
     setShowModeSelector(false)
