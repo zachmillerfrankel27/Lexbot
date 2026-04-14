@@ -485,7 +485,7 @@ export function LexBot() {
       // Handle notes-upload decision if prompt is showing
       if (showNotesPromptRef.current) {
         const t = transcript.toLowerCase()
-        if (/\b(no|skip|nope|go|proceed|without|continue|just go)\b/.test(t)) {
+        if (/\b(no|nah|nope|skip|pass|go|just go|proceed|continue|without|forget it|never mind|just do it|just tell me|just give me|go ahead|that's fine)\b/.test(t)) {
           setShowNotesPrompt(false)
           showNotesPromptRef.current = false
           handleExamTopicVoiceRef.current(pendingTopicRef.current)
@@ -504,6 +504,7 @@ export function LexBot() {
             showNotesPromptRef.current = true
             speak("Before I start thinking of one, do you want to upload your notes or outline so I can tailor the question to your class?")
               .then(() => startListeningRef.current())
+              .catch(() => startListeningRef.current())
           } else {
             handleExamTopicVoiceRef.current(transcript)
           }
@@ -684,7 +685,7 @@ export function LexBot() {
     const defaultGreetings: Record<Mode, string> = {
       discussion: "Discussion mode. What case or concept do you want to dig into?",
       socratic: "Socratic mode. I won't give you answers — I'll ask questions until you find them yourself. What topic are we working on?",
-      examprep: "Exam prep mode. Give me a topic or area of law and I'll generate a fact pattern for you.",
+      examprep: "Give me a topic or area of law and I'll generate a fact pattern for you.",
     }
 
     const greeting = customGreeting ?? defaultGreetings[selectedMode]
