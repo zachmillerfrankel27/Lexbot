@@ -34,14 +34,14 @@ const THEME = {
   // Conversation
   transcript: 'text-blue-300',
   userMsg:    'bg-blue-950 text-blue-200 border-blue-800',
-  // Fact pattern document panel
+  // Fact pattern document panel — light background improves reading retention
   docPanel: {
-    border:   'border-amber-900',
-    bg:       'bg-gray-950',
+    border:   'border-stone-200',
+    bg:       'bg-amber-50',
     header:   'text-amber-700',
-    download: 'text-amber-600 hover:text-amber-400',
-    hint:     'text-amber-900',
-    body:     'text-gray-200',
+    download: 'text-amber-700 hover:text-amber-500',
+    hint:     'text-amber-600',
+    body:     'text-gray-800',
   },
 }
 
@@ -175,6 +175,7 @@ export function LexBot() {
   const modeRef = useRef<Mode | null>(null)
   const appPhaseRef = useRef<AppPhase>('active')
   const examStepRef = useRef<ExamStep>('topic')
+  const lastExamTopicRef = useRef('')
   const startListeningRef = useRef<() => void>(() => {})
   const handleModeDetectionRef = useRef<(transcript: string) => void>(() => {})
   const handleUserMessageRef = useRef<(text: string, overrideMode?: Mode) => Promise<void>>(() => Promise.resolve())
@@ -442,6 +443,23 @@ export function LexBot() {
           handleExamTopicVoice(transcript)
           return
         }
+        // Detect "give me another fact pattern" at any post-topic step
+        if (
+          step !== 'writtenanswer' && step !== 'grading' &&
+          /\b(another|one more|go again|give me a new|new one|different one|new fact pattern|another hypo)\b/i.test(transcript)
+        ) {
+          const recap = lastExamTopicRef.current
+            ? `, or keep it in the same area as the last one on ${lastExamTopicRef.current}`
+            : ''
+          speak(`Sure. Before I do, is there a specific angle you want me to focus on${recap}?`)
+            .then(() => {
+              setExamStep('topic')
+              setShowFactPanel(false)
+              setShowIsDoneButton(false)
+              startListeningRef.current()
+            })
+          return
+        }
         if (step === 'issuespotting') {
           handleUserMessage(transcript, 'examprep')
           return
@@ -610,6 +628,7 @@ export function LexBot() {
 
   const handleExamTopicVoice = useCallback(
     async (topic: string) => {
+      lastExamTopicRef.current = topic
       setExamStep('factpattern')
       setLiveTranscript('')
 
@@ -711,8 +730,8 @@ export function LexBot() {
     >
       <div className="scanline" />
 
-      {/* Title + mode indicator */}
-      <div className="absolute top-6 left-0 right-0 flex flex-col items-center z-10 pointer-events-none">
+      {/* Title + mode indicator — z-30 ensures it renders above the fact panel */}
+      <div className="absolute top-6 left-0 right-0 flex flex-col items-center z-30 pointer-events-none">
         <h1
           className="text-2xl tracking-[0.3em] uppercase font-light text-gray-400"
           style={{ fontFamily: "'Cinzel', Georgia, serif", letterSpacing: '0.35em' }}
@@ -724,25 +743,29 @@ export function LexBot() {
         </p>
       </div>
 
-      {/* Mode selector button (top right) */}
-      {hasGreeted && (
+      {/* Mode selector button — hidden when fact panel is open (panel covers that area) */}
+      {hasGreeted && !showFactPanel && (
         <button
-          className="absolute top-6 right-6 z-20 text-xs text-gray-600 hover:text-gray-400 tracking-widest uppercase transition-colors duration-200 pointer-events-auto"
+          className="absolute top-6 right-6 z-30 text-xs text-gray-600 hover:text-gray-400 tracking-widest uppercase transition-colors duration-200 pointer-events-auto"
           onClick={() => setShowModeSelector(true)}
         >
           {mode ? '⟳ Mode' : 'Select Mode'}
         </button>
       )}
 
-      {/* 3D Canvas */}
+      {/* 3D Canvas + fact pattern side panel */}
       <div className="w-full flex-1 relative">
+
+        {/* Status ring — responsive size */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-          <div className={`w-72 h-72 rounded-full border transition-all duration-700 ${RING_CLASS[status]}`} />
+          <div className={`w-56 h-56 sm:w-64 sm:h-64 md:w-72 md:h-72 rounded-full border transition-all duration-700 ${RING_CLASS[status]}`} />
         </div>
+
+        {/* Three.js canvas — explicitly fills its container */}
         <Canvas
           camera={{ position: [0, 0, 5], fov: 30 }}
           gl={{ antialias: true, alpha: true }}
-          style={{ background: 'transparent' }}
+          style={{ background: 'transparent', position: 'absolute', inset: 0, width: '100%', height: '100%' }}
         >
           <Suspense fallback={null}>
             <Avatar
@@ -777,46 +800,46 @@ export function LexBot() {
             />
           </Suspense>
         </Canvas>
-      </div>
 
-      {/* Fact pattern side panel — absolute overlay, doesn't disturb canvas */}
-      {showFactPanel && (
-        <div className={`absolute right-0 top-0 bottom-0 w-[42%] max-w-[480px] min-w-[280px] z-30 flex flex-col border-l ${THEME.docPanel.border} ${THEME.docPanel.bg} pointer-events-auto`}>
-          {/* Header */}
-          <div className={`flex items-center justify-between px-5 py-3 border-b ${THEME.docPanel.border}`}>
-            <span
-              className={`text-[10px] uppercase tracking-[0.3em] font-light ${THEME.docPanel.header}`}
-              style={{ fontFamily: "'Cinzel', Georgia, serif" }}
-            >
-              Fact Pattern
-            </span>
-            <button
-              onClick={downloadFactPattern}
-              className={`text-[10px] uppercase tracking-widest transition-colors ${THEME.docPanel.download}`}
-            >
-              ↓ Download
-            </button>
-          </div>
-
-          {/* Body */}
-          <div className="flex-1 overflow-y-auto px-5 py-5">
-            {factPattern.split('\n\n').filter(Boolean).map((para, i) => (
-              <p key={i} className={`text-sm text-left leading-relaxed mb-4 last:mb-0 ${THEME.docPanel.body}`}>
-                {para.trim()}
-              </p>
-            ))}
-          </div>
-
-          {/* Footer hint */}
-          {examStep === 'issuespotting' && (
-            <div className={`px-5 py-3 border-t ${THEME.docPanel.border}`}>
-              <p className={`text-[10px] uppercase tracking-widest ${THEME.docPanel.hint}`}>
-                Spot the issues — talk through them out loud
-              </p>
+        {/* Fact pattern panel — overlays ONLY the canvas area, not title or bottom UI */}
+        {showFactPanel && (
+          <div className={`absolute right-0 top-0 bottom-0 w-[45%] max-w-[520px] min-w-[260px] z-20 flex flex-col border-l ${THEME.docPanel.border} ${THEME.docPanel.bg} pointer-events-auto`}>
+            {/* Header */}
+            <div className={`flex items-center justify-between px-5 py-3 border-b ${THEME.docPanel.border}`}>
+              <span
+                className={`text-[10px] uppercase tracking-[0.3em] font-light ${THEME.docPanel.header}`}
+                style={{ fontFamily: "'Cinzel', Georgia, serif" }}
+              >
+                Fact Pattern
+              </span>
+              <button
+                onClick={downloadFactPattern}
+                className={`text-[10px] uppercase tracking-widest transition-colors ${THEME.docPanel.download}`}
+              >
+                ↓ Download
+              </button>
             </div>
-          )}
-        </div>
-      )}
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto px-6 py-5">
+              {factPattern.split('\n\n').filter(Boolean).map((para, i) => (
+                <p key={i} className={`text-base leading-relaxed mb-5 last:mb-0 ${THEME.docPanel.body}`}>
+                  {para.trim()}
+                </p>
+              ))}
+            </div>
+
+            {/* Footer hint */}
+            {examStep === 'issuespotting' && (
+              <div className={`px-5 py-3 border-t ${THEME.docPanel.border}`}>
+                <p className={`text-[10px] uppercase tracking-widest ${THEME.docPanel.hint}`}>
+                  Spot the issues — talk through them out loud
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Bottom UI */}
       <div className="pb-4 flex flex-col items-center gap-3 z-10 w-full px-4">
