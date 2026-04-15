@@ -62,23 +62,22 @@ void main(){
 }
 `
 
-// ─── Fragment shader — multi-colour plasma on dark field ─────────────────────
-// Contrast is everything: base is near-black; tendrils are bright and
-// multi-coloured so they trigger Bloom and look like the reference images.
-// uSpeed controls how fast the noise evolves — driven by speaking/idle state.
-// uEnergy shifts the palette from calmer (idle) to electric (speaking).
-//
-// Anti-strobe principles (v4):
-//   • p^3 falloff = sharp isolated tendrils, not diffuse smear
-//   • Noise time multipliers halved vs v3 = much slower evolution
-//   • Hard luminance clamp (min col, 2.0) prevents brightness spikes
-//   • All IIR alphas slowed down on JS side (see useFrame)
+// ─── Fragment shader — domain-warped plasma, smoothstep S-curves ─────────────
+// v5 anti-strobe:
+//   • smoothstep S-curves replace p^n / hard thresholds — bright tendrils
+//     plateau at their peak (stable), dark gaps stay dark (stable), only the
+//     boundary moves smoothly → zero threshold-crossing flicker
+//   • Domain warp (3 extra noise evals) offsets the sample coordinate by a
+//     slowly-moving noise field → flowing/swirling plasma not pulsing blobs
+//   • Higher spatial freqs (n*4.5, n*7.0) → finer tendrils (~1/7 orb diam)
+//   • Speed raised back to visible levels (idle 0.35) because smoothstep
+//     eliminates the flicker that fast noise caused in p^n versions
 
 const FRAGMENT_SHADER = /* glsl */`
 ${NOISE_GLSL}
 uniform float uTime;
-uniform float uSpeed;    // animation speed (0.18 idle → 0.55 speaking)
-uniform float uEnergy;   // 0=idle, 1=speaking  — brightens cyan + rim
+uniform float uSpeed;    // 0.35 idle → 0.70 speaking
+uniform float uEnergy;   // 0=idle, 1=speaking
 uniform float uBrightness;
 
 varying vec3 vNormal;
@@ -89,41 +88,50 @@ void main(){
   float NdotV  = max(dot(vNormal,vViewDir),0.);
   float fresnel= pow(1.-NdotV,2.4);
   float st     = uTime * uSpeed;
+  vec3  n      = vWorldNormal;
 
-  // Three independent plasma layers — slower time multipliers than v3
-  float p1 = snoise(vWorldNormal*2.2 + vec3(st*.18))              * .5+.5;
-  float p2 = snoise(vWorldNormal*4.2 + vec3(st*.28,0.,st*.22))    * .5+.5;
-  float p3 = snoise(vWorldNormal*6.0 + vec3(st*.45))              * .5+.5;
+  // Domain warp — slowly shifting offset field makes plasma flow/swirl
+  float wa = snoise(n*2.0 + vec3(st*0.07, 1.3, 2.7));
+  float wb = snoise(n*2.0 + vec3(3.1, st*0.06, 5.4));
+  float wc = snoise(n*2.0 + vec3(7.8, 2.2, st*0.08));
+  vec3 warp = vec3(wa,wb,wc) * 0.30;
+
+  // Three plasma layers — finer features, adequate speed for fluid motion
+  float p1 = snoise((n+warp)*4.5 + vec3(st*0.30))             * .5+.5;
+  float p2 = snoise((n+warp)*7.0 + vec3(st*0.40,0.,st*0.32))  * .5+.5;
+  float p3 = snoise((n+warp*0.5)*9.5 + vec3(st*0.50))         * .5+.5;
 
   // Near-black base
-  vec3 col = vec3(0.,0.,0.015);
+  vec3 col = vec3(0.,0.,0.012);
 
-  // p^3 falloff = sharp hot-spot tendrils, very dark between them
-  float p1c = p1*p1*p1;
-  float p2c = p2*p2*p2;
+  // S-curve remapping: bright side plateaus → output can't spike above 1.0
+  // even if noise oscillates, so no frame-to-frame luminance spikes
+  float p1s = smoothstep(0.28, 0.75, p1);
+  float p2s = smoothstep(0.32, 0.78, p2);
+  float p3s = smoothstep(0.50, 0.88, p3);  // fine peaks only
 
-  // Blue tendrils (slow, dominant)
-  col += vec3(0.05,0.28,1.00) * p1c * 3.2;
+  // Blue tendrils
+  col += vec3(0.05,0.28,1.00) * p1s * 1.8;
 
-  // Purple tendrils (mid speed)
-  col += vec3(0.55,0.05,1.00) * p2c * 2.5;
+  // Purple tendrils
+  col += vec3(0.55,0.05,1.00) * p2s * 1.5;
 
-  // Cyan only at sharp noise peaks — higher threshold = fewer but crisper flares
-  float cyanAmt = 0.25 + uEnergy * 0.75;
-  col += vec3(0.00,0.90,1.00) * max(p3-0.68,0.) * 6.0 * cyanAmt;
+  // Cyan at fine peaks — energy shifts how prominent during speech
+  float cyanAmt = 0.20 + uEnergy * 0.80;
+  col += vec3(0.00,0.90,1.00) * p3s * 2.2 * cyanAmt;
 
-  // Magenta accent only where BOTH tendrils are bright (product of cubes = rare overlap)
-  col += vec3(0.90,0.05,0.55) * p1c * p2c * 2.0;
+  // White-blue veins where blue and purple tendrils overlap
+  col += vec3(0.80,0.70,1.00) * p1s * p2s * 1.8;
 
-  // Tight white/lavender core on front face
-  col += vec3(0.72,0.52,1.00) * pow(NdotV,3.0) * 0.7;
+  // Tight front-face core
+  col += vec3(0.72,0.52,1.00) * pow(NdotV,3.5) * 0.5;
 
   // Electric blue rim
-  col += vec3(0.12,0.38,1.00) * fresnel * (2.0 + uEnergy*1.0);
+  col += vec3(0.15,0.40,1.00) * fresnel * (1.8 + uEnergy*0.8);
 
   col *= uBrightness;
 
-  // Hard clamp — prevents any frame-to-frame spike above this level
+  // Safety clamp — belt and suspenders against any residual spikes
   col = min(col, vec3(2.0));
 
   float alpha = mix(0.97,0.55,fresnel);
@@ -162,8 +170,8 @@ function PlasmaSphere({ isSpeaking, isListening, isThinking, audioAmplitude }: O
 
     const active = isSpeaking || isListening || isThinking
 
-    // Speed: narrower range + much slower transition (α=0.02) vs v3 (α=0.04)
-    const baseSpeed = isSpeaking ? 0.55 : isListening ? 0.38 : isThinking ? 0.28 : 0.18
+    // Speed: raised back to visible levels now that smoothstep eliminates flicker
+    const baseSpeed = isSpeaking ? 0.70 : isListening ? 0.52 : isThinking ? 0.42 : 0.35
     const speedTarget = baseSpeed + (isSpeaking ? smoothAmpRef.current * 0.15 : 0)
     uniforms.uSpeed.value = uniforms.uSpeed.value * 0.98 + speedTarget * 0.02
 
