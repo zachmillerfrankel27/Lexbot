@@ -62,16 +62,17 @@ void main(){
 }
 `
 
-// ─── Fragment shader — v6: dark body, rim structure, two large veil layers ────
-// Redesigned toward the reference images:
-//   • Deep blue-purple base (not black) — dark body like the references
-//   • Two large slow-moving veil layers (n*1.6, n*2.5) — broad smooth shapes
-//     moving in OPPOSITE directions so they never correlate → no whole-orb pulse
-//   • Veil color blends blue→purple based on second layer
-//   • White-cyan hotspot where both layers peak simultaneously (rare, high contrast)
-//   • Strong structural rim glow — the electric ring visible in both reference images
-//   • No domain warp, no fine detail noise — keeps it calm and readable
-// Strobe fix: luminanceThreshold=0 on Bloom (no threshold-crossing flicker)
+// ─── Fragment shader — v7: ridge wisps, fixed palette, glitter-ready ─────────
+// Built on v6 architecture (anti-correlated veils, Bloom threshold=0).
+// New in v7:
+//   • Ridge noise (1 - |snoise|) draws thin wispy filaments — the gossamer
+//     veils visible in the reference images — because ridges fire only at the
+//     zero-crossings of noise, creating narrow bright lines not blobs
+//   • Fixed veil palette: (0.10,0.25,0.90) blue → (0.45,0.08,0.85) violet
+//     (v6 warm end was too magenta due to high red channel)
+//   • Raised dark base to (0.05,0.03,0.22) so gaps have visible deep color
+//   • Subtle inner luminosity: soft blue-purple glow toward centre of face
+//   • Stronger hotspot: threshold lowered, multiplier raised, always visible
 
 const FRAGMENT_SHADER = /* glsl */`
 ${NOISE_GLSL}
@@ -90,34 +91,43 @@ void main(){
   float st     = uTime * uSpeed;
   vec3  n      = vWorldNormal;
 
-  // Two large-scale veil layers moving in opposite directions —
-  // anti-correlated motion means one dims as the other brightens,
-  // keeping average surface luminance stable (eliminates whole-orb pulse)
-  float p1 = snoise(n*1.6 + vec3( st*0.55, 0.,       st*0.40)) * .5+.5;
-  float p2 = snoise(n*2.5 + vec3(-st*0.45, st*0.50,  0.     )) * .5+.5;
+  // ── Large veil layers (anti-correlated, v6 approach) ──────────────────
+  float p1 = snoise(n*2.0 + vec3( st*0.55, 0.,      st*0.40)) * .5+.5;
+  float p2 = snoise(n*2.8 + vec3(-st*0.40, st*0.45, 0.     )) * .5+.5;
 
-  // Deep blue-purple base — dark orb body matching both reference images
-  vec3 col = vec3(0.02, 0.01, 0.12);
+  // ── Ridge noise — wispy filaments ─────────────────────────────────────
+  // 1-|raw| peaks sharply at noise zero-crossings → thin bright lines
+  float r1 = 1.0 - abs(snoise(n*3.5 + vec3(-st*0.35, 0.,       st*0.50)));
+  float r2 = 1.0 - abs(snoise(n*5.2 + vec3( st*0.28, -st*0.38, 0.     )));
 
-  // Veil: presence from p1, color shifts blue→purple with p2
-  float veilMask = smoothstep(0.30, 0.75, p1);
+  // ── Deep blue-purple base — visible in dark gaps ───────────────────────
+  vec3 col = vec3(0.05, 0.03, 0.22);
+
+  // Subtle inner luminosity: orb is softly lit from within
+  col += vec3(0.04, 0.08, 0.35) * NdotV * 0.30;
+
+  // ── Main veil — corrected palette, blue→violet (not magenta) ──────────
+  float veilMask = smoothstep(0.32, 0.78, p1);
   vec3  veilCol  = mix(
-    vec3(0.08, 0.20, 0.95),             // electric blue
-    vec3(0.60, 0.05, 0.95),             // violet-purple
+    vec3(0.10, 0.25, 0.90),           // proper electric blue-purple
+    vec3(0.45, 0.08, 0.85),           // proper violet (not magenta)
     smoothstep(0.30, 0.70, p2)
   );
-  col += veilCol * veilMask * 0.65;
+  col += veilCol * veilMask * 0.60;
 
-  // White-cyan hotspot — fires only where both layers are simultaneously elevated
-  // p1*p2 product is high only at genuine overlap → rare, spatially stable
-  float hot = smoothstep(0.45, 0.78, p1 * p2);
-  col += vec3(0.70, 0.85, 1.00) * hot * 1.8 * (0.5 + uEnergy * 0.5);
+  // ── Wispy filaments — thin gossamer lines from ridge noise ─────────────
+  float wisp1 = smoothstep(0.62, 0.88, r1);
+  float wisp2 = smoothstep(0.68, 0.92, r2);
+  col += vec3(0.50, 0.25, 1.00) * wisp1 * 0.75;   // purple wisps
+  col += vec3(0.20, 0.55, 1.00) * wisp2 * 0.55;   // blue wisps
 
-  // Broad electric rim — the defining cyan ring from both reference images
-  col += vec3(0.10, 0.45, 1.00) * pow(fresnel, 1.5) * 2.2;
+  // ── White-cyan hotspot — more prominent, always present at idle ────────
+  float hot = smoothstep(0.38, 0.72, p1 * p2);
+  col += vec3(0.75, 0.88, 1.00) * hot * 2.2 * (0.45 + uEnergy * 0.55);
 
-  // Crisp bright ring right at silhouette edge (sharp inner highlight)
-  col += vec3(0.50, 0.85, 1.00) * pow(fresnel, 6.0) * 3.5;
+  // ── Structural rim — broad electric ring + crisp silhouette highlight ──
+  col += vec3(0.10, 0.45, 1.00) * pow(fresnel, 1.5) * 2.5;
+  col += vec3(0.50, 0.85, 1.00) * pow(fresnel, 6.0) * 4.0;
 
   col *= uBrightness;
 
@@ -190,17 +200,43 @@ function PlasmaSphere({ isSpeaking, isListening, isThinking, audioAmplitude }: O
   )
 }
 
-// ─── Ambient particles ────────────────────────────────────────────────────────
+// ─── Glitter particles — two layers ──────────────────────────────────────────
+// Layer 1 (glitterRef): 1200 fine particles hugging the surface, vertex-coloured
+//   blue-white to cyan-white for the sparkling "glitter" quality in the references.
+// Layer 2 (outerRef): 400 slightly larger particles scattered further out,
+//   counter-rotating for depth and the hazy outer scatter in reference image 1.
 
 function OrbParticles({ isSpeaking, isListening }: { isSpeaking: boolean; isListening: boolean }) {
-  const ref = useRef<THREE.Points>(null!)
-  const count = 500
-  const smoothOpRef = useRef(0.25)
+  const glitterRef = useRef<THREE.Points>(null!)
+  const outerRef   = useRef<THREE.Points>(null!)
+  const smoothOpRef = useRef(0.22)
 
-  const positions = useMemo(() => {
-    const arr = new Float32Array(count * 3)
-    for (let i = 0; i < count; i++) {
-      const r     = 0.72 + Math.random() * 0.90
+  const glitterCount = 1200
+  const outerCount   = 400
+
+  const { glitterPos, glitterCol } = useMemo(() => {
+    const pos = new Float32Array(glitterCount * 3)
+    const col = new Float32Array(glitterCount * 3)
+    for (let i = 0; i < glitterCount; i++) {
+      const r     = 0.67 + Math.random() * 0.38   // tight around sphere surface
+      const theta = Math.random() * Math.PI * 2
+      const phi   = Math.acos(2 * Math.random() - 1)
+      pos[i*3]   = r * Math.sin(phi) * Math.cos(theta)
+      pos[i*3+1] = r * Math.sin(phi) * Math.sin(theta)
+      pos[i*3+2] = r * Math.cos(phi)
+      // Colour: range from pale blue to white-cyan — gives colour variance
+      const t = Math.random()
+      col[i*3]   = 0.30 + t * 0.50   // R 0.30→0.80
+      col[i*3+1] = 0.45 + t * 0.45   // G 0.45→0.90
+      col[i*3+2] = 1.00               // B always 1
+    }
+    return { glitterPos: pos, glitterCol: col }
+  }, [])
+
+  const outerPos = useMemo(() => {
+    const arr = new Float32Array(outerCount * 3)
+    for (let i = 0; i < outerCount; i++) {
+      const r     = 0.85 + Math.random() * 0.90   // scattered further out
       const theta = Math.random() * Math.PI * 2
       const phi   = Math.acos(2 * Math.random() - 1)
       arr[i*3]   = r * Math.sin(phi) * Math.cos(theta)
@@ -211,31 +247,60 @@ function OrbParticles({ isSpeaking, isListening }: { isSpeaking: boolean; isList
   }, [])
 
   useFrame(({ clock }) => {
-    if (!ref.current) return
     const t = clock.getElapsedTime()
-    ref.current.rotation.y = t * 0.038
-    ref.current.rotation.x = Math.sin(t * 0.028) * 0.055
-    // Smooth opacity — very slow transition (α=0.01)
-    const opTarget = isSpeaking ? 0.50 : isListening ? 0.35 : 0.20
+
+    // Inner glitter rotates with the orb
+    if (glitterRef.current) {
+      glitterRef.current.rotation.y = t * 0.040
+      glitterRef.current.rotation.x = Math.sin(t * 0.030) * 0.055
+    }
+    // Outer scatter counter-rotates slowly — adds depth
+    if (outerRef.current) {
+      outerRef.current.rotation.y = -t * 0.022
+      outerRef.current.rotation.x = Math.cos(t * 0.018) * 0.040
+    }
+
+    const opTarget = isSpeaking ? 0.55 : isListening ? 0.38 : 0.22
     smoothOpRef.current = smoothOpRef.current * 0.99 + opTarget * 0.01
-    ;(ref.current.material as THREE.PointsMaterial).opacity = smoothOpRef.current
+    const op = smoothOpRef.current
+    if (glitterRef.current)
+      (glitterRef.current.material as THREE.PointsMaterial).opacity = op
+    if (outerRef.current)
+      (outerRef.current.material as THREE.PointsMaterial).opacity = op * 0.45
   })
 
   return (
-    <points ref={ref}>
-      <bufferGeometry>
-        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
-      </bufferGeometry>
-      <pointsMaterial
-        size={0.008}
-        color="#5599ff"
-        transparent
-        opacity={0.22}
-        sizeAttenuation
-        blending={THREE.AdditiveBlending}
-        depthWrite={false}
-      />
-    </points>
+    <>
+      <points ref={glitterRef}>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" args={[glitterPos, 3]} />
+          <bufferAttribute attach="attributes-color"    args={[glitterCol, 3]} />
+        </bufferGeometry>
+        <pointsMaterial
+          size={0.005}
+          vertexColors
+          transparent
+          opacity={0.22}
+          sizeAttenuation
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </points>
+      <points ref={outerRef}>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" args={[outerPos, 3]} />
+        </bufferGeometry>
+        <pointsMaterial
+          size={0.009}
+          color="#7aadff"
+          transparent
+          opacity={0.12}
+          sizeAttenuation
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </points>
+    </>
   )
 }
 
