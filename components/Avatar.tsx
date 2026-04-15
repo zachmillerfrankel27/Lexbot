@@ -67,11 +67,17 @@ void main(){
 // multi-coloured so they trigger Bloom and look like the reference images.
 // uSpeed controls how fast the noise evolves — driven by speaking/idle state.
 // uEnergy shifts the palette from calmer (idle) to electric (speaking).
+//
+// Anti-strobe principles (v4):
+//   • p^3 falloff = sharp isolated tendrils, not diffuse smear
+//   • Noise time multipliers halved vs v3 = much slower evolution
+//   • Hard luminance clamp (min col, 2.0) prevents brightness spikes
+//   • All IIR alphas slowed down on JS side (see useFrame)
 
 const FRAGMENT_SHADER = /* glsl */`
 ${NOISE_GLSL}
 uniform float uTime;
-uniform float uSpeed;    // animation speed (0.28 idle → 1.0 speaking)
+uniform float uSpeed;    // animation speed (0.18 idle → 0.55 speaking)
 uniform float uEnergy;   // 0=idle, 1=speaking  — brightens cyan + rim
 uniform float uBrightness;
 
@@ -84,34 +90,41 @@ void main(){
   float fresnel= pow(1.-NdotV,2.4);
   float st     = uTime * uSpeed;
 
-  // Three independent plasma layers
-  float p1 = snoise(vWorldNormal*1.8 + vec3(st*.25))            * .5+.5;
-  float p2 = snoise(vWorldNormal*3.8 + vec3(st*.40,0.,st*.32))  * .5+.5;
-  float p3 = snoise(vWorldNormal*7.5 + vec3(st*.66))            * .5+.5;
+  // Three independent plasma layers — slower time multipliers than v3
+  float p1 = snoise(vWorldNormal*2.2 + vec3(st*.18))              * .5+.5;
+  float p2 = snoise(vWorldNormal*4.2 + vec3(st*.28,0.,st*.22))    * .5+.5;
+  float p3 = snoise(vWorldNormal*6.0 + vec3(st*.45))              * .5+.5;
 
-  // Near-black base — contrast is what sells the plasma look
-  vec3 col = vec3(0.,0.,0.025);
+  // Near-black base
+  vec3 col = vec3(0.,0.,0.015);
 
-  // Blue plasma (slow, dominant)
-  col += vec3(0.05,0.28,1.00) * p1*p1 * 2.5;
+  // p^3 falloff = sharp hot-spot tendrils, very dark between them
+  float p1c = p1*p1*p1;
+  float p2c = p2*p2*p2;
 
-  // Purple plasma (mid speed)
-  col += vec3(0.55,0.05,1.00) * p2*p2 * 2.0;
+  // Blue tendrils (slow, dominant)
+  col += vec3(0.05,0.28,1.00) * p1c * 3.2;
 
-  // Cyan highlights only at noise peaks — more visible during speech
-  float cyanAmt = 0.3 + uEnergy * 0.7;
-  col += vec3(0.00,0.90,1.00) * max(p3-0.62,0.) * 5.5 * cyanAmt;
+  // Purple tendrils (mid speed)
+  col += vec3(0.55,0.05,1.00) * p2c * 2.5;
 
-  // Magenta accent where blue and purple layers overlap
-  col += vec3(0.90,0.05,0.55) * p1 * p2 * 1.4;
+  // Cyan only at sharp noise peaks — higher threshold = fewer but crisper flares
+  float cyanAmt = 0.25 + uEnergy * 0.75;
+  col += vec3(0.00,0.90,1.00) * max(p3-0.68,0.) * 6.0 * cyanAmt;
 
-  // Bright white/lavender core on front face
-  col += vec3(0.72,0.52,1.00) * pow(NdotV,2.2) * 0.9;
+  // Magenta accent only where BOTH tendrils are bright (product of cubes = rare overlap)
+  col += vec3(0.90,0.05,0.55) * p1c * p2c * 2.0;
 
-  // Electric blue rim — Bloom amplifies this into a halo
-  col += vec3(0.12,0.38,1.00) * fresnel * (2.5 + uEnergy*1.5);
+  // Tight white/lavender core on front face
+  col += vec3(0.72,0.52,1.00) * pow(NdotV,3.0) * 0.7;
+
+  // Electric blue rim
+  col += vec3(0.12,0.38,1.00) * fresnel * (2.0 + uEnergy*1.0);
 
   col *= uBrightness;
+
+  // Hard clamp — prevents any frame-to-frame spike above this level
+  col = min(col, vec3(2.0));
 
   float alpha = mix(0.97,0.55,fresnel);
   gl_FragColor = vec4(col,alpha);
@@ -138,34 +151,34 @@ function PlasmaSphere({ isSpeaking, isListening, isThinking, audioAmplitude }: O
     depthWrite:  false,
   }), [uniforms])
 
-  // Smoothed amplitude — slow enough that it never flickers visually
+  // Smoothed amplitude — very slow IIR, drives scale only
   const smoothAmpRef = useRef(0)
 
   useFrame(({ clock }) => {
     uniforms.uTime.value = clock.getElapsedTime()
 
-    // IIR low-pass: ~0.3 Hz cutoff — amplitude drives scale/speed only, not brightness
-    smoothAmpRef.current = smoothAmpRef.current * 0.96 + audioAmplitude * 0.04
+    // IIR low-pass — α=0.02, ~0.15 Hz: amplitude never flickers
+    smoothAmpRef.current = smoothAmpRef.current * 0.98 + audioAmplitude * 0.02
 
     const active = isSpeaking || isListening || isThinking
 
-    // Speed: status baseline + gentle amplitude boost during speech
-    const baseSpeed = isSpeaking ? 0.85 : isListening ? 0.55 : isThinking ? 0.42 : 0.28
-    const speedTarget = baseSpeed + (isSpeaking ? smoothAmpRef.current * 0.25 : 0)
-    uniforms.uSpeed.value = uniforms.uSpeed.value * 0.96 + speedTarget * 0.04
+    // Speed: narrower range + much slower transition (α=0.02) vs v3 (α=0.04)
+    const baseSpeed = isSpeaking ? 0.55 : isListening ? 0.38 : isThinking ? 0.28 : 0.18
+    const speedTarget = baseSpeed + (isSpeaking ? smoothAmpRef.current * 0.15 : 0)
+    uniforms.uSpeed.value = uniforms.uSpeed.value * 0.98 + speedTarget * 0.02
 
-    // Energy: 0 idle → 1 speaking — shifts cyan/rim amount, NOT per-frame brightness
+    // Energy: 0 idle → 1 speaking — very slow palette shift (α=0.015)
     const energyTarget = isSpeaking ? 1.0 : isListening ? 0.55 : isThinking ? 0.35 : 0.0
-    uniforms.uEnergy.value = uniforms.uEnergy.value * 0.97 + energyTarget * 0.03
+    uniforms.uEnergy.value = uniforms.uEnergy.value * 0.985 + energyTarget * 0.015
 
-    // Brightness: barely changes (prevents any strobe)
-    const brightTarget = active ? 1.05 : 0.90
-    uniforms.uBrightness.value = uniforms.uBrightness.value * 0.97 + brightTarget * 0.03
+    // Brightness: extremely narrow range — 0.95 to 1.02 (α=0.01, nearly static)
+    const brightTarget = active ? 1.02 : 0.95
+    uniforms.uBrightness.value = uniforms.uBrightness.value * 0.99 + brightTarget * 0.01
 
     if (meshRef.current) {
-      // Scale breathing: orb subtly pulses with speech rhythm, no brightness flicker
-      const scaleTarget = 1.0 + (isSpeaking ? smoothAmpRef.current * 0.10 : 0)
-      const s = meshRef.current.scale.x * 0.94 + scaleTarget * 0.06
+      // Scale breathing: very subtle ±4% pulse (was ±10%), slow lerp
+      const scaleTarget = 1.0 + (isSpeaking ? smoothAmpRef.current * 0.04 : 0)
+      const s = meshRef.current.scale.x * 0.97 + scaleTarget * 0.03
       meshRef.current.scale.setScalar(s)
 
       // Very slow ambient rotation
@@ -207,9 +220,9 @@ function OrbParticles({ isSpeaking, isListening }: { isSpeaking: boolean; isList
     const t = clock.getElapsedTime()
     ref.current.rotation.y = t * 0.038
     ref.current.rotation.x = Math.sin(t * 0.028) * 0.055
-    // Smooth opacity — no rapid changes
-    const opTarget = isSpeaking ? 0.60 : isListening ? 0.42 : 0.22
-    smoothOpRef.current = smoothOpRef.current * 0.97 + opTarget * 0.03
+    // Smooth opacity — very slow transition (α=0.01)
+    const opTarget = isSpeaking ? 0.50 : isListening ? 0.35 : 0.20
+    smoothOpRef.current = smoothOpRef.current * 0.99 + opTarget * 0.01
     ;(ref.current.material as THREE.PointsMaterial).opacity = smoothOpRef.current
   })
 
@@ -248,10 +261,10 @@ export function Avatar({ isSpeaking, isListening, isThinking, audioAmplitude, on
         {/* Fixed intensity — Bloom must NOT toggle with speaking state or it strobes.
             The shader's per-pixel luminance variation drives the visual difference. */}
         <Bloom
-          luminanceThreshold={0.10}
+          luminanceThreshold={0.15}
           luminanceSmoothing={0.92}
-          height={400}
-          intensity={1.8}
+          height={250}
+          intensity={1.4}
         />
       </EffectComposer>
     </group>
