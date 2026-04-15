@@ -62,22 +62,22 @@ void main(){
 }
 `
 
-// ─── Fragment shader — domain-warped plasma, smoothstep S-curves ─────────────
-// v5 anti-strobe:
-//   • smoothstep S-curves replace p^n / hard thresholds — bright tendrils
-//     plateau at their peak (stable), dark gaps stay dark (stable), only the
-//     boundary moves smoothly → zero threshold-crossing flicker
-//   • Domain warp (3 extra noise evals) offsets the sample coordinate by a
-//     slowly-moving noise field → flowing/swirling plasma not pulsing blobs
-//   • Higher spatial freqs (n*4.5, n*7.0) → finer tendrils (~1/7 orb diam)
-//   • Speed raised back to visible levels (idle 0.35) because smoothstep
-//     eliminates the flicker that fast noise caused in p^n versions
+// ─── Fragment shader — v6: dark body, rim structure, two large veil layers ────
+// Redesigned toward the reference images:
+//   • Deep blue-purple base (not black) — dark body like the references
+//   • Two large slow-moving veil layers (n*1.6, n*2.5) — broad smooth shapes
+//     moving in OPPOSITE directions so they never correlate → no whole-orb pulse
+//   • Veil color blends blue→purple based on second layer
+//   • White-cyan hotspot where both layers peak simultaneously (rare, high contrast)
+//   • Strong structural rim glow — the electric ring visible in both reference images
+//   • No domain warp, no fine detail noise — keeps it calm and readable
+// Strobe fix: luminanceThreshold=0 on Bloom (no threshold-crossing flicker)
 
 const FRAGMENT_SHADER = /* glsl */`
 ${NOISE_GLSL}
 uniform float uTime;
-uniform float uSpeed;    // 0.35 idle → 0.70 speaking
-uniform float uEnergy;   // 0=idle, 1=speaking
+uniform float uSpeed;   // 0.25 idle → 0.50 speaking
+uniform float uEnergy;  // 0=idle, 1=speaking
 uniform float uBrightness;
 
 varying vec3 vNormal;
@@ -86,56 +86,43 @@ varying vec3 vWorldNormal;
 
 void main(){
   float NdotV  = max(dot(vNormal,vViewDir),0.);
-  float fresnel= pow(1.-NdotV,2.4);
+  float fresnel= pow(1.-NdotV,2.0);
   float st     = uTime * uSpeed;
   vec3  n      = vWorldNormal;
 
-  // Domain warp — slowly shifting offset field makes plasma flow/swirl
-  float wa = snoise(n*2.0 + vec3(st*0.07, 1.3, 2.7));
-  float wb = snoise(n*2.0 + vec3(3.1, st*0.06, 5.4));
-  float wc = snoise(n*2.0 + vec3(7.8, 2.2, st*0.08));
-  vec3 warp = vec3(wa,wb,wc) * 0.30;
+  // Two large-scale veil layers moving in opposite directions —
+  // anti-correlated motion means one dims as the other brightens,
+  // keeping average surface luminance stable (eliminates whole-orb pulse)
+  float p1 = snoise(n*1.6 + vec3( st*0.55, 0.,       st*0.40)) * .5+.5;
+  float p2 = snoise(n*2.5 + vec3(-st*0.45, st*0.50,  0.     )) * .5+.5;
 
-  // Three plasma layers — finer features, adequate speed for fluid motion
-  float p1 = snoise((n+warp)*4.5 + vec3(st*0.30))             * .5+.5;
-  float p2 = snoise((n+warp)*7.0 + vec3(st*0.40,0.,st*0.32))  * .5+.5;
-  float p3 = snoise((n+warp*0.5)*9.5 + vec3(st*0.50))         * .5+.5;
+  // Deep blue-purple base — dark orb body matching both reference images
+  vec3 col = vec3(0.02, 0.01, 0.12);
 
-  // Near-black base
-  vec3 col = vec3(0.,0.,0.012);
+  // Veil: presence from p1, color shifts blue→purple with p2
+  float veilMask = smoothstep(0.30, 0.75, p1);
+  vec3  veilCol  = mix(
+    vec3(0.08, 0.20, 0.95),             // electric blue
+    vec3(0.60, 0.05, 0.95),             // violet-purple
+    smoothstep(0.30, 0.70, p2)
+  );
+  col += veilCol * veilMask * 0.65;
 
-  // S-curve remapping: bright side plateaus → output can't spike above 1.0
-  // even if noise oscillates, so no frame-to-frame luminance spikes
-  float p1s = smoothstep(0.28, 0.75, p1);
-  float p2s = smoothstep(0.32, 0.78, p2);
-  float p3s = smoothstep(0.50, 0.88, p3);  // fine peaks only
+  // White-cyan hotspot — fires only where both layers are simultaneously elevated
+  // p1*p2 product is high only at genuine overlap → rare, spatially stable
+  float hot = smoothstep(0.45, 0.78, p1 * p2);
+  col += vec3(0.70, 0.85, 1.00) * hot * 1.8 * (0.5 + uEnergy * 0.5);
 
-  // Blue tendrils
-  col += vec3(0.05,0.28,1.00) * p1s * 1.8;
+  // Broad electric rim — the defining cyan ring from both reference images
+  col += vec3(0.10, 0.45, 1.00) * pow(fresnel, 1.5) * 2.2;
 
-  // Purple tendrils
-  col += vec3(0.55,0.05,1.00) * p2s * 1.5;
-
-  // Cyan at fine peaks — energy shifts how prominent during speech
-  float cyanAmt = 0.20 + uEnergy * 0.80;
-  col += vec3(0.00,0.90,1.00) * p3s * 2.2 * cyanAmt;
-
-  // White-blue veins where blue and purple tendrils overlap
-  col += vec3(0.80,0.70,1.00) * p1s * p2s * 1.8;
-
-  // Tight front-face core
-  col += vec3(0.72,0.52,1.00) * pow(NdotV,3.5) * 0.5;
-
-  // Electric blue rim
-  col += vec3(0.15,0.40,1.00) * fresnel * (1.8 + uEnergy*0.8);
+  // Crisp bright ring right at silhouette edge (sharp inner highlight)
+  col += vec3(0.50, 0.85, 1.00) * pow(fresnel, 6.0) * 3.5;
 
   col *= uBrightness;
 
-  // Safety clamp — belt and suspenders against any residual spikes
-  col = min(col, vec3(2.0));
-
-  float alpha = mix(0.97,0.55,fresnel);
-  gl_FragColor = vec4(col,alpha);
+  float alpha = mix(0.97, 0.55, fresnel);
+  gl_FragColor = vec4(col, alpha);
 }
 `
 
@@ -170,9 +157,9 @@ function PlasmaSphere({ isSpeaking, isListening, isThinking, audioAmplitude }: O
 
     const active = isSpeaking || isListening || isThinking
 
-    // Speed: raised back to visible levels now that smoothstep eliminates flicker
-    const baseSpeed = isSpeaking ? 0.70 : isListening ? 0.52 : isThinking ? 0.42 : 0.35
-    const speedTarget = baseSpeed + (isSpeaking ? smoothAmpRef.current * 0.15 : 0)
+    // Speed: moderate — veils should drift visibly but calmly
+    const baseSpeed = isSpeaking ? 0.50 : isListening ? 0.38 : isThinking ? 0.30 : 0.25
+    const speedTarget = baseSpeed + (isSpeaking ? smoothAmpRef.current * 0.10 : 0)
     uniforms.uSpeed.value = uniforms.uSpeed.value * 0.98 + speedTarget * 0.02
 
     // Energy: 0 idle → 1 speaking — very slow palette shift (α=0.015)
@@ -268,11 +255,13 @@ export function Avatar({ isSpeaking, isListening, isThinking, audioAmplitude, on
       <EffectComposer>
         {/* Fixed intensity — Bloom must NOT toggle with speaking state or it strobes.
             The shader's per-pixel luminance variation drives the visual difference. */}
+        {/* luminanceThreshold=0: every pixel gets a proportional soft glow.
+            No threshold boundary = no pixels flickering in/out of bloom = no strobe. */}
         <Bloom
-          luminanceThreshold={0.15}
-          luminanceSmoothing={0.92}
-          height={250}
-          intensity={1.4}
+          luminanceThreshold={0}
+          luminanceSmoothing={0.9}
+          height={300}
+          intensity={0.5}
         />
       </EffectComposer>
     </group>
