@@ -46,7 +46,7 @@ float snoise(vec3 v){
 }
 `
 
-// ─── Vertex shader — no displacement, perfect sphere ─────────────────────────
+// ─── Vertex shader ────────────────────────────────────────────────────────────
 
 const VERTEX_SHADER = /* glsl */`
 varying vec3 vNormal;
@@ -62,23 +62,21 @@ void main(){
 }
 `
 
-// ─── Fragment shader — v7: ridge wisps, fixed palette, glitter-ready ─────────
-// Built on v6 architecture (anti-correlated veils, Bloom threshold=0).
-// New in v7:
-//   • Ridge noise (1 - |snoise|) draws thin wispy filaments — the gossamer
-//     veils visible in the reference images — because ridges fire only at the
-//     zero-crossings of noise, creating narrow bright lines not blobs
-//   • Fixed veil palette: (0.10,0.25,0.90) blue → (0.45,0.08,0.85) violet
-//     (v6 warm end was too magenta due to high red channel)
-//   • Raised dark base to (0.05,0.03,0.22) so gaps have visible deep color
-//   • Subtle inner luminosity: soft blue-purple glow toward centre of face
-//   • Stronger hotspot: threshold lowered, multiplier raised, always visible
+// ─── Fragment shader — v8 ─────────────────────────────────────────────────────
+// • Tiny domain warp (magnitude 0.10) — organic shape deformation without
+//   the correlated global pulse that large warp caused in v5
+// • Fine turbulence offset on veil mask input — makes veil edges ragged and
+//   gossamer (wispy) without ridge-noise circuit-board traces
+// • Two anti-correlated large veil layers moving in opposite directions
+// • Vivid electric palette: blue (0.12,0.30,1.0) / purple (0.60,0.10,1.0)
+// • Large bright core: lower threshold → looks like internal energy source
+// • Speed raised to idle 0.35 / speaking 0.65 so it visibly flows
 
 const FRAGMENT_SHADER = /* glsl */`
 ${NOISE_GLSL}
 uniform float uTime;
-uniform float uSpeed;   // 0.25 idle → 0.50 speaking
-uniform float uEnergy;  // 0=idle, 1=speaking
+uniform float uSpeed;    // 0.35 idle → 0.65 speaking
+uniform float uEnergy;   // 0=idle, 1=speaking
 uniform float uBrightness;
 
 varying vec3 vNormal;
@@ -91,43 +89,43 @@ void main(){
   float st     = uTime * uSpeed;
   vec3  n      = vWorldNormal;
 
-  // ── Large veil layers (anti-correlated, v6 approach) ──────────────────
-  float p1 = snoise(n*2.0 + vec3( st*0.55, 0.,      st*0.40)) * .5+.5;
-  float p2 = snoise(n*2.8 + vec3(-st*0.40, st*0.45, 0.     )) * .5+.5;
+  // Tiny domain warp — organic deformation, magnitude 0.10 (~15% feature width)
+  float wx = snoise(n*1.0 + vec3(st*0.05, 0.7, 1.3));
+  float wy = snoise(n*1.0 + vec3(2.1, st*0.05, 0.4));
+  float wz = snoise(n*1.0 + vec3(0.8, 1.9, st*0.06));
+  vec3 warp = vec3(wx,wy,wz) * 0.10;
 
-  // ── Ridge noise — wispy filaments ─────────────────────────────────────
-  // 1-|raw| peaks sharply at noise zero-crossings → thin bright lines
-  float r1 = 1.0 - abs(snoise(n*3.5 + vec3(-st*0.35, 0.,       st*0.50)));
-  float r2 = 1.0 - abs(snoise(n*5.2 + vec3( st*0.28, -st*0.38, 0.     )));
+  // Two large anti-correlated veil layers
+  float p1 = snoise((n+warp)*1.5 + vec3( st*0.55, 0.,      st*0.40)) * .5+.5;
+  float p2 = snoise((n+warp)*1.8 + vec3(-st*0.45, st*0.50, 0.     )) * .5+.5;
 
-  // ── Deep blue-purple base — visible in dark gaps ───────────────────────
-  vec3 col = vec3(0.05, 0.03, 0.22);
+  // Fine turbulence — offsets veil edges to create wispy, gossamer quality
+  float turb = snoise(n*5.5 + vec3(st*0.70, -st*0.60, st*0.50)) * 0.10;
 
-  // Subtle inner luminosity: orb is softly lit from within
-  col += vec3(0.04, 0.08, 0.35) * NdotV * 0.30;
+  // Deep navy base
+  vec3 col = vec3(0.03, 0.02, 0.18);
 
-  // ── Main veil — corrected palette, blue→violet (not magenta) ──────────
-  float veilMask = smoothstep(0.32, 0.78, p1);
-  vec3  veilCol  = mix(
-    vec3(0.10, 0.25, 0.90),           // proper electric blue-purple
-    vec3(0.45, 0.08, 0.85),           // proper violet (not magenta)
+  // Soft inner luminosity — lit from within
+  col += vec3(0.05, 0.08, 0.40) * NdotV * 0.35;
+
+  // Vivid veil layers with turbulent wispy edges
+  float v1 = smoothstep(0.38, 0.78, p1 + turb);
+  float v2 = smoothstep(0.42, 0.80, p2 + turb * 0.8);
+  vec3 veilCol = mix(
+    vec3(0.12, 0.30, 1.00),   // vivid electric blue
+    vec3(0.60, 0.10, 1.00),   // vivid electric purple
     smoothstep(0.30, 0.70, p2)
   );
-  col += veilCol * veilMask * 0.60;
+  col += veilCol * v1 * 0.90;
+  col += vec3(0.45, 0.12, 0.95) * v2 * 0.70;
 
-  // ── Wispy filaments — thin gossamer lines from ridge noise ─────────────
-  float wisp1 = smoothstep(0.62, 0.88, r1);
-  float wisp2 = smoothstep(0.68, 0.92, r2);
-  col += vec3(0.50, 0.25, 1.00) * wisp1 * 0.75;   // purple wisps
-  col += vec3(0.20, 0.55, 1.00) * wisp2 * 0.55;   // blue wisps
+  // Large bright core — internal energy source, covers wider area than v7
+  float core = smoothstep(0.30, 0.65, p1 * p2);
+  col += vec3(0.85, 0.92, 1.00) * core * 3.0 * (0.40 + uEnergy * 0.60);
 
-  // ── White-cyan hotspot — more prominent, always present at idle ────────
-  float hot = smoothstep(0.38, 0.72, p1 * p2);
-  col += vec3(0.75, 0.88, 1.00) * hot * 2.2 * (0.45 + uEnergy * 0.55);
-
-  // ── Structural rim — broad electric ring + crisp silhouette highlight ──
+  // Structural rim — broad electric ring + crisp silhouette
   col += vec3(0.10, 0.45, 1.00) * pow(fresnel, 1.5) * 2.5;
-  col += vec3(0.50, 0.85, 1.00) * pow(fresnel, 6.0) * 4.0;
+  col += vec3(0.50, 0.85, 1.00) * pow(fresnel, 6.0) * 4.5;
 
   col *= uBrightness;
 
@@ -143,7 +141,7 @@ function PlasmaSphere({ isSpeaking, isListening, isThinking, audioAmplitude }: O
 
   const uniforms = useMemo(() => ({
     uTime:       { value: 0 },
-    uSpeed:      { value: 0.30 },
+    uSpeed:      { value: 0.35 },
     uEnergy:     { value: 0 },
     uBrightness: { value: 1.0 },
   }), [])
@@ -156,37 +154,30 @@ function PlasmaSphere({ isSpeaking, isListening, isThinking, audioAmplitude }: O
     depthWrite:  false,
   }), [uniforms])
 
-  // Smoothed amplitude — very slow IIR, drives scale only
   const smoothAmpRef = useRef(0)
 
   useFrame(({ clock }) => {
     uniforms.uTime.value = clock.getElapsedTime()
 
-    // IIR low-pass — α=0.02, ~0.15 Hz: amplitude never flickers
     smoothAmpRef.current = smoothAmpRef.current * 0.98 + audioAmplitude * 0.02
 
     const active = isSpeaking || isListening || isThinking
 
-    // Speed: moderate — veils should drift visibly but calmly
-    const baseSpeed = isSpeaking ? 0.50 : isListening ? 0.38 : isThinking ? 0.30 : 0.25
+    const baseSpeed = isSpeaking ? 0.65 : isListening ? 0.50 : isThinking ? 0.40 : 0.35
     const speedTarget = baseSpeed + (isSpeaking ? smoothAmpRef.current * 0.10 : 0)
     uniforms.uSpeed.value = uniforms.uSpeed.value * 0.98 + speedTarget * 0.02
 
-    // Energy: 0 idle → 1 speaking — very slow palette shift (α=0.015)
     const energyTarget = isSpeaking ? 1.0 : isListening ? 0.55 : isThinking ? 0.35 : 0.0
     uniforms.uEnergy.value = uniforms.uEnergy.value * 0.985 + energyTarget * 0.015
 
-    // Brightness: extremely narrow range — 0.95 to 1.02 (α=0.01, nearly static)
     const brightTarget = active ? 1.02 : 0.95
     uniforms.uBrightness.value = uniforms.uBrightness.value * 0.99 + brightTarget * 0.01
 
     if (meshRef.current) {
-      // Scale breathing: very subtle ±4% pulse (was ±10%), slow lerp
       const scaleTarget = 1.0 + (isSpeaking ? smoothAmpRef.current * 0.04 : 0)
       const s = meshRef.current.scale.x * 0.97 + scaleTarget * 0.03
       meshRef.current.scale.setScalar(s)
 
-      // Very slow ambient rotation
       const t = uniforms.uTime.value
       meshRef.current.rotation.y = t * 0.018
       meshRef.current.rotation.x = Math.sin(t * 0.033) * 0.010
@@ -201,14 +192,12 @@ function PlasmaSphere({ isSpeaking, isListening, isThinking, audioAmplitude }: O
 }
 
 // ─── Glitter particles — two layers ──────────────────────────────────────────
-// Layer 1 (glitterRef): 1200 fine particles hugging the surface, vertex-coloured
-//   blue-white to cyan-white for the sparkling "glitter" quality in the references.
-// Layer 2 (outerRef): 400 slightly larger particles scattered further out,
-//   counter-rotating for depth and the hazy outer scatter in reference image 1.
+// Layer 1: 1200 fine vertex-coloured particles tight around surface (glitter)
+// Layer 2: 400 slightly larger particles scattered further out, counter-rotating
 
 function OrbParticles({ isSpeaking, isListening }: { isSpeaking: boolean; isListening: boolean }) {
-  const glitterRef = useRef<THREE.Points>(null!)
-  const outerRef   = useRef<THREE.Points>(null!)
+  const glitterRef  = useRef<THREE.Points>(null!)
+  const outerRef    = useRef<THREE.Points>(null!)
   const smoothOpRef = useRef(0.22)
 
   const glitterCount = 1200
@@ -218,17 +207,17 @@ function OrbParticles({ isSpeaking, isListening }: { isSpeaking: boolean; isList
     const pos = new Float32Array(glitterCount * 3)
     const col = new Float32Array(glitterCount * 3)
     for (let i = 0; i < glitterCount; i++) {
-      const r     = 0.67 + Math.random() * 0.38   // tight around sphere surface
+      const r     = 0.67 + Math.random() * 0.38
       const theta = Math.random() * Math.PI * 2
       const phi   = Math.acos(2 * Math.random() - 1)
       pos[i*3]   = r * Math.sin(phi) * Math.cos(theta)
       pos[i*3+1] = r * Math.sin(phi) * Math.sin(theta)
       pos[i*3+2] = r * Math.cos(phi)
-      // Colour: range from pale blue to white-cyan — gives colour variance
+      // Colour range: pale blue → white-cyan
       const t = Math.random()
-      col[i*3]   = 0.30 + t * 0.50   // R 0.30→0.80
-      col[i*3+1] = 0.45 + t * 0.45   // G 0.45→0.90
-      col[i*3+2] = 1.00               // B always 1
+      col[i*3]   = 0.30 + t * 0.50
+      col[i*3+1] = 0.45 + t * 0.45
+      col[i*3+2] = 1.00
     }
     return { glitterPos: pos, glitterCol: col }
   }, [])
@@ -236,7 +225,7 @@ function OrbParticles({ isSpeaking, isListening }: { isSpeaking: boolean; isList
   const outerPos = useMemo(() => {
     const arr = new Float32Array(outerCount * 3)
     for (let i = 0; i < outerCount; i++) {
-      const r     = 0.85 + Math.random() * 0.90   // scattered further out
+      const r     = 0.85 + Math.random() * 0.90
       const theta = Math.random() * Math.PI * 2
       const phi   = Math.acos(2 * Math.random() - 1)
       arr[i*3]   = r * Math.sin(phi) * Math.cos(theta)
@@ -248,18 +237,14 @@ function OrbParticles({ isSpeaking, isListening }: { isSpeaking: boolean; isList
 
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime()
-
-    // Inner glitter rotates with the orb
     if (glitterRef.current) {
       glitterRef.current.rotation.y = t * 0.040
       glitterRef.current.rotation.x = Math.sin(t * 0.030) * 0.055
     }
-    // Outer scatter counter-rotates slowly — adds depth
     if (outerRef.current) {
       outerRef.current.rotation.y = -t * 0.022
       outerRef.current.rotation.x = Math.cos(t * 0.018) * 0.040
     }
-
     const opTarget = isSpeaking ? 0.55 : isListening ? 0.38 : 0.22
     smoothOpRef.current = smoothOpRef.current * 0.99 + opTarget * 0.01
     const op = smoothOpRef.current
@@ -318,10 +303,8 @@ export function Avatar({ isSpeaking, isListening, isThinking, audioAmplitude, on
       <OrbParticles isSpeaking={isSpeaking} isListening={isListening} />
 
       <EffectComposer>
-        {/* Fixed intensity — Bloom must NOT toggle with speaking state or it strobes.
-            The shader's per-pixel luminance variation drives the visual difference. */}
-        {/* luminanceThreshold=0: every pixel gets a proportional soft glow.
-            No threshold boundary = no pixels flickering in/out of bloom = no strobe. */}
+        {/* luminanceThreshold=0: all pixels get proportional soft glow,
+            no threshold boundary to flicker across */}
         <Bloom
           luminanceThreshold={0}
           luminanceSmoothing={0.9}
