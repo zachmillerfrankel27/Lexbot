@@ -308,8 +308,9 @@ export function Avatar({ isSpeaking, isListening, isThinking, audioAmplitude, on
         <Bloom
           luminanceThreshold={0}
           luminanceSmoothing={0.9}
-          height={100}
-          intensity={0.5}
+          height={60}
+          intensity={0.45}
+          kernelSize={1}
         />
       </EffectComposer>
     </group>
