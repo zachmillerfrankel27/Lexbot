@@ -308,7 +308,7 @@ export function Avatar({ isSpeaking, isListening, isThinking, audioAmplitude, on
         <Bloom
           luminanceThreshold={0.08}
           luminanceSmoothing={0.95}
-          height={55}
+          height={70}
           intensity={0.42}
           kernelSize={2}
         />
