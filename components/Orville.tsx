@@ -859,7 +859,7 @@ export function Orville() {
             ORVILLE
           </h1>
           <p className="text-xs tracking-widest text-gray-700 uppercase mt-1">
-            {mode ? MODE_LABELS[mode] : 'Your Personal Law Tutor'}
+            {mode ? MODE_LABELS[mode] : 'Your Personal AI Law Tutor'}
           </p>
         </div>
 
