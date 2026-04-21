@@ -699,10 +699,13 @@ export function LexBot() {
   const handleModeDetection = useCallback((transcript: string) => {
     const t = transcript.toLowerCase()
 
+    // "IRAC this/the [topic]" is a one-off breakdown request, not a structured exam session
+    const iracVerb = /\birac\s+(this|the|a|an|my|\w)/i.test(transcript)
+
     let detectedMode: Mode = 'discussion'
-    if (/\b(quiz|test me|ask me|question me|socratic|work through|challenge me|make me work)\b/.test(t)) {
+    if (!iracVerb && /\b(quiz|test me|ask me|question me|socratic|work through|challenge me|make me work)\b/.test(t)) {
       detectedMode = 'socratic'
-    } else if (/\b(exam|practice exam|fact pattern|essay|hypo|hypothetical|prep|timed)\b/.test(t)) {
+    } else if (!iracVerb && /\b(exam|practice exam|fact pattern|essay|hypo|hypothetical|prep|timed)\b/.test(t)) {
       detectedMode = 'examprep'
     }
 
