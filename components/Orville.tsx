@@ -352,7 +352,7 @@ export function Orville() {
       }
 
       // Echo-clearing pause — still in 'speaking' state visually
-      await new Promise((r) => setTimeout(r, 400))
+      await new Promise((r) => setTimeout(r, 800))
     } finally {
       // Always release the lock and reset status, even if an error occurred
       isSpeakingRef.current = false
@@ -433,6 +433,11 @@ export function Orville() {
     (transcript: string) => {
       // ── Initialization phases ──────────────────────────────────────────────
       if (appPhaseRef.current === 'awaiting_name') {
+        // Ignore very short results — likely mic echo or ambient noise from TTS playback
+        if (transcript.trim().length < 2) {
+          startListeningRef.current()
+          return
+        }
         // Extract name from common intro patterns ("I'm Zach", "my name is Zach", etc.)
         // Fall back to the last word of the transcript, then "there".
         const nameMatch = transcript.match(
