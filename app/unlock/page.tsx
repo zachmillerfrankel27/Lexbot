@@ -55,14 +55,14 @@ export default function UnlockPage() {
   return (
     <main className="min-h-screen flex flex-col items-center justify-center bg-black gap-8 px-6">
       <div className="flex flex-col items-center gap-2 text-center">
-        <h1 className="text-2xl font-light tracking-widest text-gray-200 uppercase">Lex</h1>
+        <h1 className="text-2xl font-light tracking-widest text-gray-200 uppercase">Orville</h1>
         <p className="text-xs text-gray-600 tracking-widest uppercase">Beta Access</p>
       </div>
       <Suspense>
         <UnlockForm />
       </Suspense>
       <p className="text-xs text-gray-700 text-center max-w-xs">
-        Lex is currently invite-only. Enter your access code to continue.
+        Orville is currently invite-only. Enter your access code to continue.
       </p>
     </main>
   )

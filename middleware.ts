@@ -5,7 +5,7 @@ const VALID_CODES = (process.env.INVITE_CODES ?? '')
   .map((c) => c.trim().toLowerCase())
   .filter(Boolean)
 
-const COOKIE = 'lexbot-access'
+const COOKIE = 'orville-access'
 const UNLOCK_PATH = '/unlock'
 
 export function middleware(req: NextRequest) {
