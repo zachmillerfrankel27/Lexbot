@@ -1,7 +1,7 @@
 import dynamic from 'next/dynamic'
 
-// LexBot uses WebGL + Web Speech API — must be client-side only
-const LexBot = dynamic(() => import('@/components/LexBot').then(m => m.LexBot), {
+// Orville uses WebGL + Web Speech API — must be client-side only
+const Orville = dynamic(() => import('@/components/Orville').then(m => m.Orville), {
   ssr: false,
   loading: () => (
     <div className="w-full h-screen flex items-center justify-center bg-black">
@@ -13,5 +13,5 @@ const LexBot = dynamic(() => import('@/components/LexBot').then(m => m.LexBot), 
 })
 
 export default function Home() {
-  return <LexBot />
+  return <Orville />
 }

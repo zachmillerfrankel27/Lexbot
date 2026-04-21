@@ -76,7 +76,7 @@ const MODE_LABELS: Record<Mode, string> = {
 
 const MODE_DESCRIPTIONS: Record<Mode, string> = {
   discussion: 'Free-flowing conversation — clarify, explore, and go deep on any topic.',
-  socratic: 'Lex guides you with questions. Derive the rule yourself.',
+  socratic: 'Orville guides you with questions. Derive the rule yourself.',
   examprep: 'Fact pattern → issue spotting → written answer → graded feedback.',
 }
 
@@ -122,14 +122,14 @@ declare global {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function LexBot() {
+export function Orville() {
   const [status, setStatus] = useState<Status>('idle')
   const [mode, setMode] = useState<Mode | null>(null)
   const [showModeSelector, setShowModeSelector] = useState(false)
   const [messages, setMessages] = useState<Message[]>(() => {
     if (typeof window === 'undefined') return []
     try {
-      const saved = localStorage.getItem('lexbot-history')
+      const saved = localStorage.getItem('orville-history')
       return saved ? JSON.parse(saved) : []
     } catch {
       return []
@@ -145,11 +145,11 @@ export function LexBot() {
   const [userName, setUserName] = useState<string>(() => {
     if (typeof window === 'undefined') return ''
     try {
-      const stored = localStorage.getItem('lexbot-username') ?? ''
+      const stored = localStorage.getItem('orville-username') ?? ''
       // Discard any previously-stored non-name (e.g. "I" from a bad extraction)
       const NON_NAMES = new Set(['i', 'a', 'an', 'the', 'my', 'is', 'am', 'are', 'its', 'it', 'there', 'name', 'what', 'hi', 'hey', 'hello', 'just', 'uh', 'um'])
       if (NON_NAMES.has(stored.toLowerCase())) {
-        localStorage.removeItem('lexbot-username')
+        localStorage.removeItem('orville-username')
         return ''
       }
       return stored
@@ -173,7 +173,7 @@ export function LexBot() {
   const [showFactPanel, setShowFactPanel] = useState(false)
   const [userLevel, setUserLevel] = useState<string>(() => {
     if (typeof window === 'undefined') return ''
-    return localStorage.getItem('lexbot-level') ?? ''
+    return localStorage.getItem('orville-level') ?? ''
   })
   const [showNotesPrompt, setShowNotesPrompt] = useState(false)
 
@@ -210,7 +210,7 @@ export function LexBot() {
   // Persist chat history to localStorage
   useEffect(() => {
     try {
-      localStorage.setItem('lexbot-history', JSON.stringify(messages))
+      localStorage.setItem('orville-history', JSON.stringify(messages))
     } catch {
       // storage quota exceeded or unavailable — ignore
     }
@@ -446,7 +446,7 @@ export function LexBot() {
           ? raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase()
           : 'there'
         setUserName(name)
-        try { localStorage.setItem('lexbot-username', name) } catch { /* ignore */ }
+        try { localStorage.setItem('orville-username', name) } catch { /* ignore */ }
         setAppPhase('awaiting_mode')
         appPhaseRef.current = 'awaiting_mode'
         speak(
@@ -471,7 +471,7 @@ export function LexBot() {
         else                                                   level = transcript.trim().slice(0, 30)
         if (level) {
           setUserLevel(level)
-          try { localStorage.setItem('lexbot-level', level) } catch { /* ignore */ }
+          try { localStorage.setItem('orville-level', level) } catch { /* ignore */ }
         }
         setAppPhase('active')
         appPhaseRef.current = 'active'
@@ -856,10 +856,10 @@ export function LexBot() {
             className="text-2xl tracking-[0.3em] uppercase font-light text-gray-400"
             style={{ fontFamily: "'Cinzel', Georgia, serif", letterSpacing: '0.35em' }}
           >
-            L E X
+            ORVILLE
           </h1>
           <p className="text-xs tracking-widest text-gray-700 uppercase mt-1">
-            {mode ? MODE_LABELS[mode] : 'AI Law Tutor'}
+            {mode ? MODE_LABELS[mode] : 'Your Personal AI Law Tutor'}
           </p>
         </div>
 
@@ -892,7 +892,7 @@ export function LexBot() {
                     if (!userName) {
                       setAppPhase('awaiting_name')
                       appPhaseRef.current = 'awaiting_name'
-                      speak("Hi there — I'm Lex, your law tutor. What's your name?").then(() => startListeningRef.current()).catch(() => startListeningRef.current())
+                      speak("Hi there — I'm Orville, your law tutor. What's your name?").then(() => startListeningRef.current()).catch(() => startListeningRef.current())
                     } else {
                       setAppPhase('awaiting_mode')
                       appPhaseRef.current = 'awaiting_mode'
@@ -1053,7 +1053,7 @@ export function LexBot() {
               className="text-xs text-gray-700 hover:text-red-500 tracking-widest uppercase transition-colors duration-200"
               onClick={() => {
                 setMessages([])
-                localStorage.removeItem('lexbot-history')
+                localStorage.removeItem('orville-history')
               }}
             >
               Clear
@@ -1082,7 +1082,7 @@ export function LexBot() {
                     }`}
                   >
                     <span className="block text-[10px] uppercase tracking-widest opacity-50 mb-1">
-                      {msg.role === 'user' ? 'You' : 'Lex'}
+                      {msg.role === 'user' ? 'You' : 'Orville'}
                     </span>
                     {msg.content}
                   </div>

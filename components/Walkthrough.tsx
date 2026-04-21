@@ -2,18 +2,18 @@
 
 import { useState, useEffect } from 'react'
 
-const STORAGE_KEY = 'lexbot-onboarded'
+const STORAGE_KEY = 'orville-onboarded'
 
 const STEPS = [
   {
     label: 'Welcome',
-    title: 'Meet Lex',
+    title: 'Meet Orville',
     body: 'Your AI law tutor. Voice-first, Socratic, and built for the way law school actually works — case analysis, exam prep, and the kind of deep thinking your professors expect.',
   },
   {
     label: 'How it works',
     title: 'Click to Speak',
-    body: "Tap Lex's face to activate your microphone. Speak naturally — just like office hours. Lex listens, thinks, then responds out loud. You can also read the transcript at any time.",
+    body: "Tap Orville to activate your microphone. Speak naturally — just like office hours. Orville listens, thinks, then responds out loud. You can also read the transcript at any time.",
   },
   {
     label: 'Modes',
@@ -25,11 +25,11 @@ const STEPS = [
       },
       {
         name: 'Socratic',
-        desc: "Lex leads with questions. You derive the rule yourself — just like getting cold-called in class.",
+        desc: "Orville leads with questions. You derive the rule yourself — just like getting cold-called in class.",
       },
       {
         name: 'Exam Prep',
-        desc: 'Lex generates a fact pattern, you spot issues and write your IRAC answer, then Lex grades it.',
+        desc: 'Orville generates a fact pattern, you spot issues and write your IRAC answer, then Orville grades it.',
       },
     ],
     footer: 'Switch modes anytime from the bottom of the screen.',
@@ -37,7 +37,7 @@ const STEPS = [
   {
     label: 'Privacy',
     title: 'Before You Begin',
-    body: 'Your conversations are sent to Anthropic\'s Claude AI to generate responses, and to ElevenLabs to produce Lex\'s voice. Conversation history is stored only in your browser. Nothing is sold or shared with third parties.',
+    body: 'Your conversations are sent to Anthropic\'s Claude AI to generate responses, and to ElevenLabs to produce Orville\'s voice. Conversation history is stored only in your browser. Nothing is sold or shared with third parties.',
     footer: 'By continuing you agree to our Privacy Policy.',
   },
 ]

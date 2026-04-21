@@ -1,7 +1,7 @@
 import Link from 'next/link'
 
 export const metadata = {
-  title: 'Privacy Policy — Lex',
+  title: 'Privacy Policy — Orville',
 }
 
 const LAST_UPDATED = 'March 2026'
@@ -17,7 +17,7 @@ export default function PrivacyPage() {
             href="/"
             className="text-[10px] tracking-[0.3em] uppercase text-gray-700 hover:text-gray-500 transition-colors mb-4 self-start"
           >
-            ← Back to Lex
+            ← Back to Orville
           </Link>
           <h1
             className="text-2xl tracking-[0.2em] uppercase text-gray-200 font-light"
@@ -31,16 +31,16 @@ export default function PrivacyPage() {
         </div>
 
         <Section title="Overview">
-          Lex is a voice-first AI law tutor. We take your privacy seriously. This
-          policy explains what data is collected when you use Lex, how it is used,
+          Orville is a voice-first AI law tutor by Orbly. We take your privacy seriously. This
+          policy explains what data is collected when you use Orville, how it is used,
           and what we do not do with it.
         </Section>
 
         <Section title="What We Collect">
           <ul className="flex flex-col gap-3 list-none">
             <Item label="Conversation content">
-              Your messages and Lex's responses are sent to Anthropic's Claude API
-              to generate replies, and to ElevenLabs to produce Lex's voice.
+              Your messages and Orville's responses are sent to Anthropic's Claude API
+              to generate replies, and to ElevenLabs to produce Orville's voice.
               These third-party services process your input under their own privacy
               policies (linked below). We do not store your conversations on our
               servers.
@@ -68,13 +68,13 @@ export default function PrivacyPage() {
           <ul className="flex flex-col gap-3 list-none">
             <Item>We do not sell your data to any third party.</Item>
             <Item>We do not use your conversations for advertising.</Item>
-            <Item>We do not require you to create an account or provide personal information to use Lex.</Item>
+            <Item>We do not require you to create an account or provide personal information to use Orville.</Item>
             <Item>We do not share your data with anyone except the third-party processors listed below, solely to operate the service.</Item>
           </ul>
         </Section>
 
         <Section title="Third-Party Processors">
-          The following services process data on our behalf when you use Lex:
+          The following services process data on our behalf when you use Orville:
           <ul className="flex flex-col gap-3 mt-4 list-none">
             <Item label="Anthropic (Claude AI)">
               Processes your messages to generate responses. Privacy policy:{' '}
@@ -83,7 +83,7 @@ export default function PrivacyPage() {
               </ExternalLink>
             </Item>
             <Item label="ElevenLabs">
-              Processes Lex's text responses to generate voice audio. Privacy policy:{' '}
+              Processes Orville's text responses to generate voice audio. Privacy policy:{' '}
               <ExternalLink href="https://elevenlabs.io/privacy">
                 elevenlabs.io/privacy
               </ExternalLink>
@@ -112,14 +112,14 @@ export default function PrivacyPage() {
         </Section>
 
         <Section title="Children">
-          Lex is intended for use by law students and legal professionals. It is
+          Orville is intended for use by law students. It is
           not directed at children under 13. We do not knowingly collect data
           from children.
         </Section>
 
         <Section title="Changes to This Policy">
           We may update this policy as the product evolves. We will update the
-          "Last updated" date above when we do. Continued use of Lex after
+          "Last updated" date above when we do. Continued use of Orville after
           changes are posted constitutes acceptance of the updated policy.
         </Section>
 
@@ -135,7 +135,7 @@ export default function PrivacyPage() {
             href="/"
             className="text-xs tracking-widest uppercase text-gray-700 hover:text-gray-500 transition-colors"
           >
-            ← Return to Lex
+            ← Return to Orville
           </Link>
         </div>
 

@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Lex — Your AI Law Tutor',
-  description: 'A conversational 3D AI tutor for law school — case analysis, real-world application, exam strategy.',
+  title: 'Orville — Your AI Law Tutor',
+  description: 'A conversational 3D AI law tutor — case analysis, real-world application, and exam prep, powered by Orbly.',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

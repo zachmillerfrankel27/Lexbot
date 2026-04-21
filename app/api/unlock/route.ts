@@ -5,7 +5,7 @@ const VALID_CODES = (process.env.INVITE_CODES ?? '')
   .map((c) => c.trim().toLowerCase())
   .filter(Boolean)
 
-const COOKIE = 'lexbot-access'
+const COOKIE = 'orville-access'
 // 90-day expiry — long enough that beta users aren't nagged
 const MAX_AGE = 60 * 60 * 24 * 90
 
