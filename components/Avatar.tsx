@@ -262,7 +262,7 @@ function OrbParticles({ isSpeaking, isListening }: { isSpeaking: boolean; isList
           <bufferAttribute attach="attributes-color"    args={[glitterCol, 3]} />
         </bufferGeometry>
         <pointsMaterial
-          size={0.005}
+          size={0.008}
           vertexColors
           transparent
           opacity={0.22}
@@ -276,7 +276,7 @@ function OrbParticles({ isSpeaking, isListening }: { isSpeaking: boolean; isList
           <bufferAttribute attach="attributes-position" args={[outerPos, 3]} />
         </bufferGeometry>
         <pointsMaterial
-          size={0.009}
+          size={0.012}
           color="#7aadff"
           transparent
           opacity={0.12}
@@ -306,11 +306,11 @@ export function Avatar({ isSpeaking, isListening, isThinking, audioAmplitude, on
         {/* luminanceThreshold=0: all pixels get proportional soft glow,
             no threshold boundary to flicker across */}
         <Bloom
-          luminanceThreshold={0}
-          luminanceSmoothing={0.9}
-          height={60}
-          intensity={0.45}
-          kernelSize={1}
+          luminanceThreshold={0.08}
+          luminanceSmoothing={0.95}
+          height={80}
+          intensity={0.55}
+          kernelSize={2}
         />
       </EffectComposer>
     </group>
