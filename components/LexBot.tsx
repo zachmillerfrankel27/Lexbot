@@ -844,8 +844,6 @@ export function LexBot() {
           'radial-gradient(ellipse at 50% 40%, #0d0a1e 0%, #040210 55%, #000000 100%)',
       }}
     >
-      <div className="scanline" />
-
       {/* ── Left column: avatar + UI (full width when no panel, flex-1 when panel shows) ── */}
       <div className={`flex flex-col relative ${showFactPanel ? 'flex-1' : 'w-full flex-1'}`}>
 
@@ -874,11 +872,6 @@ export function LexBot() {
 
         {/* 3D Canvas */}
         <div className="w-full flex-1 relative">
-          {/* Status ring — responsive size */}
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-            <div className={`w-56 h-56 sm:w-64 sm:h-64 md:w-72 md:h-72 rounded-full border transition-all duration-700 ${RING_CLASS[status]}`} />
-          </div>
-
           <Canvas
             camera={{ position: [0, 0, 5], fov: 30 }}
             gl={{ antialias: true, alpha: true }}

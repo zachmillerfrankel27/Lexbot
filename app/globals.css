@@ -27,29 +27,6 @@ body {
   background: #000;
 }
 
-/* Scanning line effect — gives Zordon energy-field look */
-@keyframes scanline {
-  0% { transform: translateY(-100%); }
-  100% { transform: translateY(100vh); }
-}
-
-.scanline {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: linear-gradient(
-    to bottom,
-    transparent,
-    rgba(68, 102, 255, 0.15),
-    transparent
-  );
-  animation: scanline 6s linear infinite;
-  pointer-events: none;
-  z-index: 10;
-}
-
 /* Noise texture overlay for a cinematic look */
 .noise::after {
   content: '';
