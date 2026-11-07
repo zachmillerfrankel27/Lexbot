@@ -3,13 +3,13 @@ import Anthropic from '@anthropic-ai/sdk'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-// ── Simple in-process rate limiter ─────────────────────────────────────────
-// Limits each IP to RATE_LIMIT_MAX requests per RATE_LIMIT_WINDOW_MS.
-// Note: serverless instances don't share memory, so this guards against burst
-// abuse within a single instance. The invite-code gate is the primary guard.
+// ── In-process rate limiters ────────────────────────────────────────────────
+// Note: serverless instances don't share memory. These guard against burst
+// abuse within a single instance; the invite-code gate is the primary guard.
+
+// Per-IP burst limiter
 const RATE_LIMIT_MAX = Number(process.env.RATE_LIMIT_MAX ?? 20)
 const RATE_LIMIT_WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS ?? 60_000)
-
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>()
 
 function isRateLimited(ip: string): boolean {
@@ -20,6 +20,24 @@ function isRateLimited(ip: string): boolean {
     return false
   }
   if (entry.count >= RATE_LIMIT_MAX) return true
+  entry.count++
+  return false
+}
+
+// Per-invite-code daily message cap (set DAILY_MESSAGE_LIMIT env var to configure)
+const DAILY_LIMIT = Number(process.env.DAILY_MESSAGE_LIMIT ?? 50)
+const DAILY_WINDOW_MS = 24 * 60 * 60 * 1000
+const dailyUsageMap = new Map<string, { count: number; resetAt: number }>()
+
+function isDailyLimitReached(code: string): boolean {
+  if (!code || !DAILY_LIMIT) return false
+  const now = Date.now()
+  const entry = dailyUsageMap.get(code)
+  if (!entry || now > entry.resetAt) {
+    dailyUsageMap.set(code, { count: 1, resetAt: now + DAILY_WINDOW_MS })
+    return false
+  }
+  if (entry.count >= DAILY_LIMIT) return true
   entry.count++
   return false
 }
@@ -80,10 +98,12 @@ export async function POST(req: NextRequest) {
 
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown'
   if (isRateLimited(ip)) {
-    return NextResponse.json(
-      { error: 'Too many requests. Please slow down.' },
-      { status: 429 }
-    )
+    return NextResponse.json({ error: 'Too many requests. Please slow down.' }, { status: 429 })
+  }
+
+  const inviteCode = req.cookies.get('orville-access')?.value ?? ''
+  if (isDailyLimitReached(inviteCode)) {
+    return NextResponse.json({ error: 'daily_limit_reached' }, { status: 429 })
   }
 
   try {

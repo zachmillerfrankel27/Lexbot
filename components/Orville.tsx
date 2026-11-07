@@ -137,6 +137,10 @@ export function Orville() {
   const [showHistory, setShowHistory] = useState(false)
   const [hasGreeted, setHasGreeted] = useState(false)
   const [showWalkthrough, setShowWalkthrough] = useState(false)
+  const [browserSupported, setBrowserSupported] = useState(true)
+  const [showFeedback, setShowFeedback] = useState(false)
+  const [feedbackNote, setFeedbackNote] = useState('')
+  const [feedbackSent, setFeedbackSent] = useState(false)
   const [userName, setUserName] = useState<string>(() => {
     if (typeof window === 'undefined') return ''
     try {
@@ -153,6 +157,13 @@ export function Orville() {
   // Show walkthrough on first visit (deferred so localStorage is available)
   useEffect(() => {
     if (shouldShowWalkthrough()) setShowWalkthrough(true)
+  }, [])
+
+  // Detect browser voice support after mount (SSR-safe)
+  useEffect(() => {
+    setBrowserSupported(
+      'SpeechRecognition' in window || 'webkitSpeechRecognition' in window
+    )
   }, [])
 
   // Exam Prep state
@@ -388,6 +399,11 @@ export function Orville() {
 
         const data = await res.json()
         if (!res.ok) {
+          if (data.error === 'daily_limit_reached') {
+            await speak("You've reached your daily message limit. Come back tomorrow to keep studying.")
+            setStatus('idle')
+            return
+          }
           console.error('Chat API error:', res.status, data.error || data)
         }
         if (data.message) {
@@ -419,6 +435,27 @@ export function Orville() {
   // Keep handleUserMessageRef in sync so it can be called from mode detection
   // without creating circular dependency issues.
   useEffect(() => { handleUserMessageRef.current = handleUserMessage }, [handleUserMessage])
+
+  const handleFeedbackSubmit = useCallback(async () => {
+    try {
+      await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lastResponse,
+          note: feedbackNote,
+          mode,
+          timestamp: new Date().toISOString(),
+        }),
+      })
+    } catch { /* log failure silently — feedback is best-effort */ }
+    setFeedbackSent(true)
+    setTimeout(() => {
+      setShowFeedback(false)
+      setFeedbackNote('')
+      setFeedbackSent(false)
+    }, 2000)
+  }, [lastResponse, feedbackNote, mode])
 
   // ── Voice recognition ──────────────────────────────────────────────────────
 
@@ -1167,6 +1204,88 @@ export function Orville() {
       {/* First-time walkthrough */}
       {showWalkthrough && (
         <Walkthrough onDone={() => setShowWalkthrough(false)} />
+      )}
+
+      {/* Feedback button — bottom-left, always visible after greeting */}
+      {hasGreeted && !showFeedback && (
+        <button
+          className="absolute bottom-6 left-6 z-20 text-xs text-gray-800 hover:text-gray-600 tracking-widest uppercase transition-colors pointer-events-auto"
+          onClick={() => setShowFeedback(true)}
+        >
+          Feedback
+        </button>
+      )}
+
+      {/* Feedback overlay */}
+      {showFeedback && (
+        <div
+          className="absolute inset-0 z-40 flex items-center justify-center pointer-events-auto"
+          style={{ background: 'rgba(0,0,0,0.88)' }}
+        >
+          <div className="flex flex-col gap-5 px-8 py-8 max-w-sm w-full">
+            {feedbackSent ? (
+              <p className="text-green-400 text-sm text-center tracking-widest">
+                Thanks — received.
+              </p>
+            ) : (
+              <>
+                <h3
+                  className="text-xs tracking-[0.3em] uppercase text-gray-500"
+                  style={{ fontFamily: "'Cinzel', Georgia, serif" }}
+                >
+                  Send Feedback
+                </h3>
+                {lastResponse && (
+                  <div className="bg-gray-950 border border-gray-800 rounded p-3 max-h-24 overflow-y-auto">
+                    <span className="block text-[10px] text-gray-700 uppercase tracking-widest mb-1">Last response</span>
+                    <span className="text-xs text-gray-500 leading-relaxed">{lastResponse}</span>
+                  </div>
+                )}
+                <textarea
+                  value={feedbackNote}
+                  onChange={(e) => setFeedbackNote(e.target.value)}
+                  placeholder="What went wrong, or what could be better?"
+                  className="bg-gray-950 border border-gray-700 rounded p-3 text-xs text-gray-300 leading-relaxed resize-none h-24 focus:outline-none focus:border-purple-600 transition-colors"
+                />
+                <div className="flex justify-between items-center">
+                  <button
+                    onClick={() => setShowFeedback(false)}
+                    className="text-xs text-gray-700 hover:text-gray-500 uppercase tracking-widest transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleFeedbackSubmit}
+                    className="px-5 py-2 text-xs uppercase tracking-widest border border-gray-700 text-gray-400 hover:border-gray-400 hover:text-gray-200 rounded transition-colors"
+                  >
+                    Send →
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Browser warning — shown when Web Speech API is unavailable (Firefox, Safari) */}
+      {!browserSupported && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black bg-opacity-96 pointer-events-auto">
+          <div className="flex flex-col items-center gap-6 px-8 py-10 max-w-sm text-center">
+            <h2
+              className="text-xl uppercase font-light text-gray-200 tracking-[0.2em]"
+              style={{ fontFamily: "'Cinzel', Georgia, serif" }}
+            >
+              Chrome Required
+            </h2>
+            <p className="text-sm text-gray-500 leading-relaxed">
+              Orville is a voice-first tutor and requires Chrome for microphone support.
+              Open this page in Chrome on desktop or Android to get started.
+            </p>
+            <p className="text-xs text-gray-700 tracking-widest uppercase">
+              Safari and Firefox do not support voice input.
+            </p>
+          </div>
+        </div>
       )}
     </div>
   )
