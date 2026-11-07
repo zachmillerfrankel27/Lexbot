@@ -9,10 +9,12 @@ import { Walkthrough, shouldShowWalkthrough } from './Walkthrough'
 
 type Status = 'idle' | 'listening' | 'thinking' | 'speaking'
 type Mode = 'discussion' | 'socratic' | 'examprep'
-type AppPhase = 'awaiting_name' | 'awaiting_mode' | 'awaiting_level' | 'active'
+type AppPhase = 'awaiting_name' | 'awaiting_mode' | 'active'
 type ExamStep = 'topic' | 'factpattern' | 'issuespotting' | 'writtenanswer' | 'grading' | 'done'
 type Message = { role: 'user' | 'assistant'; content: string }
 
+// Words that should never be accepted as a user's name
+const NON_NAMES = new Set(['i', 'a', 'an', 'the', 'my', 'is', 'am', 'are', 'its', 'it', 'there', 'name', 'what', 'hi', 'hey', 'hello', 'just', 'uh', 'um'])
 
 // ─── Theme — edit this object to rebrand the entire interface ─────────────────
 
@@ -59,13 +61,6 @@ const STATUS_COLOR: Record<Status, string> = {
   listening: THEME.status.listening.text,
   thinking:  THEME.status.thinking.text,
   speaking:  THEME.status.speaking.text,
-}
-
-const RING_CLASS: Record<Status, string> = {
-  idle:      THEME.status.idle.ring,
-  listening: THEME.status.listening.ring,
-  thinking:  THEME.status.thinking.ring,
-  speaking:  THEME.status.speaking.ring,
 }
 
 const MODE_LABELS: Record<Mode, string> = {
@@ -146,8 +141,6 @@ export function Orville() {
     if (typeof window === 'undefined') return ''
     try {
       const stored = localStorage.getItem('orville-username') ?? ''
-      // Discard any previously-stored non-name (e.g. "I" from a bad extraction)
-      const NON_NAMES = new Set(['i', 'a', 'an', 'the', 'my', 'is', 'am', 'are', 'its', 'it', 'there', 'name', 'what', 'hi', 'hey', 'hello', 'just', 'uh', 'um'])
       if (NON_NAMES.has(stored.toLowerCase())) {
         localStorage.removeItem('orville-username')
         return ''
@@ -322,7 +315,7 @@ export function Orville() {
         utterance.pitch = 0.82
         utterance.volume = 1
 
-        let lipInterval: ReturnType<typeof setInterval>
+        let lipInterval: ReturnType<typeof setInterval> | undefined
         utterance.onstart = () => {
           lipInterval = setInterval(() => {
             setAudioAmplitude(0.05 + Math.random() * 0.2)
@@ -429,7 +422,7 @@ export function Orville() {
 
   // ── Voice recognition ──────────────────────────────────────────────────────
 
-  const handleVoiceResult: (transcript: string) => void = useCallback(
+  const handleVoiceResult = useCallback(
     (transcript: string) => {
       // ── Initialization phases ──────────────────────────────────────────────
       if (appPhaseRef.current === 'awaiting_name') {
@@ -439,12 +432,10 @@ export function Orville() {
           return
         }
         // Extract name from common intro patterns ("I'm Zach", "my name is Zach", etc.)
-        // Fall back to the last word of the transcript, then "there".
+        // Falls back to the last word of the transcript, then "there".
         const nameMatch = transcript.match(
           /\b(?:i'?m|i\s+am|name(?:'s|\s+is)?|call\s+me)\s+([a-zA-Z]+)/i
         )
-        // Non-name words that should never be accepted as a name
-        const NON_NAMES = new Set(['i', 'a', 'an', 'the', 'my', 'is', 'am', 'are', 'its', 'it', 'name', 'what', 'hi', 'hey', 'hello', 'just', 'uh', 'um'])
         const raw = nameMatch?.[1] ?? transcript.trim().split(/\s+/).pop() ?? ''
         const candidate = raw.toLowerCase()
         const name = (raw && !NON_NAMES.has(candidate))
@@ -462,28 +453,6 @@ export function Orville() {
 
       if (appPhaseRef.current === 'awaiting_mode') {
         handleModeDetectionRef.current(transcript)
-        return
-      }
-
-      if (appPhaseRef.current === 'awaiting_level') {
-        const t = transcript.toLowerCase()
-        let level = ''
-        if (/\b(1l|first.?year|1st.?year|one l)\b/.test(t))   level = '1L'
-        else if (/\b(2l|second.?year|2nd.?year|two l)\b/.test(t)) level = '2L'
-        else if (/\b(3l|third.?year|3rd.?year|three l)\b/.test(t)) level = '3L'
-        else if (/\bbar\b/.test(t))                            level = 'Bar Prep'
-        else if (/\bllm\b/.test(t))                            level = 'LLM'
-        else                                                   level = transcript.trim().slice(0, 30)
-        if (level) {
-          setUserLevel(level)
-          try { localStorage.setItem('orville-level', level) } catch { /* ignore */ }
-        }
-        setAppPhase('active')
-        appPhaseRef.current = 'active'
-        const notesHint = notesRef.current.trim() ? '' : ' If you want to upload notes so I can tailor it to your class, use the button below.'
-        speak(`Got it.${notesHint} What topic or area of law should we work on?`)
-          .then(() => startListeningRef.current())
-          .catch(() => startListeningRef.current())
         return
       }
 
@@ -858,7 +827,7 @@ export function Orville() {
         {/* Title + mode indicator */}
         <div className="absolute top-6 left-0 right-0 flex flex-col items-center z-30 pointer-events-none">
           <h1
-            className="text-2xl tracking-[0.3em] uppercase font-light text-gray-400"
+            className="text-2xl uppercase font-light text-gray-400"
             style={{ fontFamily: "'Cinzel', Georgia, serif", letterSpacing: '0.35em' }}
           >
             ORVILLE

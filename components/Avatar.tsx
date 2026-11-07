@@ -62,15 +62,7 @@ void main(){
 }
 `
 
-// ─── Fragment shader — v8 ─────────────────────────────────────────────────────
-// • Tiny domain warp (magnitude 0.10) — organic shape deformation without
-//   the correlated global pulse that large warp caused in v5
-// • Fine turbulence offset on veil mask input — makes veil edges ragged and
-//   gossamer (wispy) without ridge-noise circuit-board traces
-// • Two anti-correlated large veil layers moving in opposite directions
-// • Vivid electric palette: blue (0.12,0.30,1.0) / purple (0.60,0.10,1.0)
-// • Large bright core: lower threshold → looks like internal energy source
-// • Speed raised to idle 0.35 / speaking 0.65 so it visibly flows
+// ─── Fragment shader ──────────────────────────────────────────────────────────
 
 const FRAGMENT_SHADER = /* glsl */`
 ${NOISE_GLSL}
@@ -119,7 +111,7 @@ void main(){
   col += veilCol * v1 * 0.90;
   col += vec3(0.45, 0.12, 0.95) * v2 * 0.70;
 
-  // Large bright core — internal energy source, covers wider area than v7
+  // Large bright core — internal energy source
   float core = smoothstep(0.30, 0.65, p1 * p2);
   col += vec3(0.85, 0.92, 1.00) * core * 3.0 * (0.40 + uEnergy * 0.60);
 
@@ -303,8 +295,6 @@ export function Avatar({ isSpeaking, isListening, isThinking, audioAmplitude, on
       <OrbParticles isSpeaking={isSpeaking} isListening={isListening} />
 
       <EffectComposer>
-        {/* luminanceThreshold=0: all pixels get proportional soft glow,
-            no threshold boundary to flicker across */}
         <Bloom
           luminanceThreshold={0.08}
           luminanceSmoothing={0.95}
