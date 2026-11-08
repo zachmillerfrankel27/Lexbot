@@ -86,7 +86,7 @@ export function Walkthrough({ onDone }: WalkthroughProps) {
         </div>
 
         {/* Step label */}
-        <p className="text-[10px] tracking-[0.3em] uppercase text-gray-600">
+        <p className="font-sans text-[10px] tracking-[0.3em] uppercase text-gray-600">
           {current.label}
         </p>
 
