@@ -548,7 +548,7 @@ export function Orville() {
         if (/\b(1l|first.year|1st.year|one.l)\b/.test(t)) year = '1L'
         else if (/\b(2l|second.year|2nd.year|two.l)\b/.test(t)) year = '2L'
         else if (/\b(3l|third.year|3rd.year|three.l)\b/.test(t)) year = '3L'
-        else if (/\b(llm|l\.l\.m|master)\b/.test(t)) year = 'LLM'
+        else if (/\b(llm|l\.l\.m|masters?)\b/.test(t)) year = 'LLM'
         setUserYear(year)
         setUserLevel(year)
         try { localStorage.setItem('orville-year', year) } catch { /* ignore */ }
@@ -827,6 +827,8 @@ export function Orville() {
     setShowNotesPrompt(false)
     showNotesPromptRef.current = false
     pendingTopicRef.current = ''
+    awaitingReadRef.current = false
+    awaitingStartRef.current = false
 
     // Save previous session before starting a new one
     if (sessionStartRef.current) {
@@ -1300,7 +1302,11 @@ export function Orville() {
                 </button>
               )}
               <button
-                onClick={() => setShowFactPanel(false)}
+                onClick={() => {
+                  setShowFactPanel(false)
+                  awaitingReadRef.current = false
+                  awaitingStartRef.current = false
+                }}
                 className={`text-[10px] uppercase tracking-widest transition-colors ${THEME.docPanel.download}`}
               >
                 ✕
