@@ -8,7 +8,7 @@ const LAST_UPDATED = 'March 2026'
 
 export default function PrivacyPage() {
   return (
-    <main className="min-h-screen bg-black text-gray-400 px-6 py-16 flex flex-col items-center">
+    <main className="h-screen overflow-y-auto bg-black text-gray-400 px-6 py-16 flex flex-col items-center">
       <div className="w-full max-w-2xl flex flex-col gap-10">
 
         {/* Header */}
