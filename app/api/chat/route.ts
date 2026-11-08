@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { messages, mode, notes, level } = await req.json()
+    const { messages, mode, notes, level, stream } = await req.json()
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json({ error: 'Invalid messages format' }, { status: 400 })
@@ -122,6 +122,39 @@ export async function POST(req: NextRequest) {
 
     if (notes && notes.trim()) {
       systemPrompt += `\n\nSTUDENT NOTES/OUTLINE (use these to tailor fact patterns, flag coverage gaps, and calibrate grading — do not dump the full text back at the student, just reference relevant parts contextually):\n${notes.trim()}`
+    }
+
+    if (stream) {
+      const encoder = new TextEncoder()
+      const readable = new ReadableStream({
+        async start(controller) {
+          try {
+            const streamResponse = client.messages.stream({
+              model: 'claude-sonnet-4-6',
+              max_tokens: selectedMode === 'examprep' ? 800 : 180,
+              system: systemPrompt,
+              messages,
+            })
+            for await (const event of streamResponse) {
+              if (
+                event.type === 'content_block_delta' &&
+                event.delta.type === 'text_delta'
+              ) {
+                controller.enqueue(encoder.encode(event.delta.text))
+              }
+            }
+            controller.close()
+          } catch (err) {
+            controller.error(err)
+          }
+        },
+      })
+      return new NextResponse(readable, {
+        headers: {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Cache-Control': 'no-store',
+        },
+      })
     }
 
     const response = await client.messages.create({
