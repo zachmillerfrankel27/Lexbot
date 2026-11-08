@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { messages, mode, notes, level, stream } = await req.json()
+    const { messages, mode, notes, level, courses, stream } = await req.json()
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json({ error: 'Invalid messages format' }, { status: 400 })
@@ -116,8 +116,16 @@ export async function POST(req: NextRequest) {
     const selectedMode = mode && SYSTEM_PROMPTS[mode] ? mode : 'discussion'
     let systemPrompt = SYSTEM_PROMPTS[selectedMode]
 
-    if (level && typeof level === 'string' && level.trim() && selectedMode === 'examprep') {
-      systemPrompt += `\n\nSTUDENT LEVEL: ${level.trim()}. Calibrate fact pattern complexity, issue density, and analytical depth accordingly.`
+    if (level && typeof level === 'string' && level.trim()) {
+      if (selectedMode === 'examprep') {
+        systemPrompt += `\n\nSTUDENT LEVEL: ${level.trim()}. Calibrate fact pattern complexity, issue density, and analytical depth accordingly.`
+      } else {
+        systemPrompt += `\n\nSTUDENT LEVEL: ${level.trim()}. Calibrate your explanations and examples to this stage of legal education.`
+      }
+    }
+
+    if (courses && Array.isArray(courses) && courses.length > 0) {
+      systemPrompt += `\n\nSTUDENT COURSES THIS SEMESTER: ${courses.join(', ')}. Connect your examples and explanations to these subjects where relevant.`
     }
 
     if (notes && notes.trim()) {

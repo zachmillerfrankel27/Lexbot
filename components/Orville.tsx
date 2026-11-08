@@ -226,6 +226,8 @@ export function Orville() {
   const awaitingStartRef = useRef(false)
   const factPatternRef = useRef('')
   const sessionStartRef = useRef<{ mode: Mode; start: number; topic?: string } | null>(null)
+  const userYearRef = useRef(userYear)
+  const userCoursesRef = useRef<string[]>(userCourses)
 
   // Keep refs in sync
   useEffect(() => { statusRef.current = status }, [status])
@@ -235,6 +237,8 @@ export function Orville() {
   useEffect(() => { examStepRef.current = examStep }, [examStep])
   useEffect(() => { notesRef.current = notes }, [notes])
   useEffect(() => { factPatternRef.current = factPattern }, [factPattern])
+  useEffect(() => { userYearRef.current = userYear }, [userYear])
+  useEffect(() => { userCoursesRef.current = userCourses }, [userCourses])
 
   // Persist chat history to localStorage
   useEffect(() => {
@@ -446,7 +450,7 @@ export function Orville() {
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: newMessages, mode: activeMode, notes: notesRef.current, level: userLevel }),
+          body: JSON.stringify({ messages: newMessages, mode: activeMode, notes: notesRef.current, level: userLevel, courses: userCoursesRef.current }),
           signal: chatController.signal,
         })
         clearTimeout(chatTimeout)
@@ -846,6 +850,11 @@ export function Orville() {
       }
     }
     sessionStartRef.current = { mode: selectedMode, start: Date.now() }
+    fetch('/api/analytics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event: 'session_start', mode: selectedMode, level: userYearRef.current }),
+    }).catch(() => {})
 
     const defaultGreetings: Record<Mode, string> = {
       discussion: "Discussion mode. What case or concept do you want to dig into?",
@@ -888,6 +897,12 @@ export function Orville() {
     setAppPhase('active')
     appPhaseRef.current = 'active'
     setMessages([])
+    sessionStartRef.current = { mode: detectedMode, start: Date.now() }
+    fetch('/api/analytics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event: 'session_start', mode: detectedMode, level: userYearRef.current }),
+    }).catch(() => {})
     handleUserMessageRef.current(transcript, detectedMode)
   }, [selectMode])
 
@@ -919,12 +934,25 @@ export function Orville() {
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: newMessages, mode: 'examprep', notes: notesRef.current, level: userLevel, stream: true }),
+          body: JSON.stringify({ messages: newMessages, mode: 'examprep', notes: notesRef.current, level: userLevel, courses: userCoursesRef.current, stream: true }),
           signal: examController.signal,
         })
         clearTimeout(examTimeout)
 
-        if (!res.ok || !res.body) {
+        if (!res.ok) {
+          try {
+            const data = await res.json()
+            if (data.error === 'daily_limit_reached') {
+              await speak("You've reached your daily message limit. Come back tomorrow to keep studying.")
+              setStatus('idle')
+              return
+            }
+          } catch {}
+          setStatus('idle')
+          startListeningRef.current()
+          return
+        }
+        if (!res.body) {
           setStatus('idle')
           startListeningRef.current()
           return
