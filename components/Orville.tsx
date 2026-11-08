@@ -4,15 +4,18 @@ import { useState, useRef, useCallback, useEffect, Suspense } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { Avatar } from './Avatar'
 import { Walkthrough, shouldShowWalkthrough } from './Walkthrough'
+import { ProfileModal, SessionEntry } from './ProfileModal'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Status = 'idle' | 'listening' | 'thinking' | 'speaking'
 type Mode = 'discussion' | 'socratic' | 'examprep'
-type AppPhase = 'awaiting_name' | 'awaiting_mode' | 'awaiting_level' | 'active'
+type AppPhase = 'awaiting_name' | 'awaiting_year' | 'awaiting_courses' | 'awaiting_mode' | 'active'
 type ExamStep = 'topic' | 'factpattern' | 'issuespotting' | 'writtenanswer' | 'grading' | 'done'
 type Message = { role: 'user' | 'assistant'; content: string }
 
+// Words that should never be accepted as a user's name
+const NON_NAMES = new Set(['i', 'a', 'an', 'the', 'my', 'is', 'am', 'are', 'its', 'it', 'there', 'name', 'what', 'hi', 'hey', 'hello', 'just', 'uh', 'um'])
 
 // ─── Theme — edit this object to rebrand the entire interface ─────────────────
 
@@ -59,13 +62,6 @@ const STATUS_COLOR: Record<Status, string> = {
   listening: THEME.status.listening.text,
   thinking:  THEME.status.thinking.text,
   speaking:  THEME.status.speaking.text,
-}
-
-const RING_CLASS: Record<Status, string> = {
-  idle:      THEME.status.idle.ring,
-  listening: THEME.status.listening.ring,
-  thinking:  THEME.status.thinking.ring,
-  speaking:  THEME.status.speaking.ring,
 }
 
 const MODE_LABELS: Record<Mode, string> = {
@@ -142,12 +138,14 @@ export function Orville() {
   const [showHistory, setShowHistory] = useState(false)
   const [hasGreeted, setHasGreeted] = useState(false)
   const [showWalkthrough, setShowWalkthrough] = useState(false)
+  const [browserSupported, setBrowserSupported] = useState(true)
+  const [showFeedback, setShowFeedback] = useState(false)
+  const [feedbackNote, setFeedbackNote] = useState('')
+  const [feedbackSent, setFeedbackSent] = useState(false)
   const [userName, setUserName] = useState<string>(() => {
     if (typeof window === 'undefined') return ''
     try {
       const stored = localStorage.getItem('orville-username') ?? ''
-      // Discard any previously-stored non-name (e.g. "I" from a bad extraction)
-      const NON_NAMES = new Set(['i', 'a', 'an', 'the', 'my', 'is', 'am', 'are', 'its', 'it', 'there', 'name', 'what', 'hi', 'hey', 'hello', 'just', 'uh', 'um'])
       if (NON_NAMES.has(stored.toLowerCase())) {
         localStorage.removeItem('orville-username')
         return ''
@@ -160,6 +158,13 @@ export function Orville() {
   // Show walkthrough on first visit (deferred so localStorage is available)
   useEffect(() => {
     if (shouldShowWalkthrough()) setShowWalkthrough(true)
+  }, [])
+
+  // Detect browser voice support after mount (SSR-safe)
+  useEffect(() => {
+    setBrowserSupported(
+      'SpeechRecognition' in window || 'webkitSpeechRecognition' in window
+    )
   }, [])
 
   // Exam Prep state
@@ -176,6 +181,25 @@ export function Orville() {
     return localStorage.getItem('orville-level') ?? ''
   })
   const [showNotesPrompt, setShowNotesPrompt] = useState(false)
+  const [userYear, setUserYear] = useState<string>(() => {
+    if (typeof window === 'undefined') return ''
+    return localStorage.getItem('orville-year') ?? ''
+  })
+  const [userCourses, setUserCourses] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return []
+    try {
+      const saved = localStorage.getItem('orville-courses')
+      return saved ? JSON.parse(saved) : []
+    } catch { return [] }
+  })
+  const [showProfile, setShowProfile] = useState(false)
+  const [sessions, setSessions] = useState<SessionEntry[]>(() => {
+    if (typeof window === 'undefined') return []
+    try {
+      const saved = localStorage.getItem('orville-sessions')
+      return saved ? JSON.parse(saved) : []
+    } catch { return [] }
+  })
 
   const statusRef = useRef<Status>('idle')
   const modeRef = useRef<Mode | null>(null)
@@ -198,6 +222,12 @@ export function Orville() {
   const chatEndRef = useRef<HTMLDivElement>(null)
   const notesInputRef = useRef<HTMLInputElement>(null)
   const writtenAnswerRef = useRef<HTMLTextAreaElement>(null)
+  const awaitingReadRef = useRef(false)
+  const awaitingStartRef = useRef(false)
+  const factPatternRef = useRef('')
+  const sessionStartRef = useRef<{ mode: Mode; start: number; topic?: string } | null>(null)
+  const userYearRef = useRef(userYear)
+  const userCoursesRef = useRef<string[]>(userCourses)
 
   // Keep refs in sync
   useEffect(() => { statusRef.current = status }, [status])
@@ -206,6 +236,9 @@ export function Orville() {
   useEffect(() => { appPhaseRef.current = appPhase }, [appPhase])
   useEffect(() => { examStepRef.current = examStep }, [examStep])
   useEffect(() => { notesRef.current = notes }, [notes])
+  useEffect(() => { factPatternRef.current = factPattern }, [factPattern])
+  useEffect(() => { userYearRef.current = userYear }, [userYear])
+  useEffect(() => { userCoursesRef.current = userCourses }, [userCourses])
 
   // Persist chat history to localStorage
   useEffect(() => {
@@ -215,6 +248,35 @@ export function Orville() {
       // storage quota exceeded or unavailable — ignore
     }
   }, [messages])
+
+  // Persist sessions to localStorage
+  useEffect(() => {
+    try { localStorage.setItem('orville-sessions', JSON.stringify(sessions)) } catch {}
+  }, [sessions])
+
+  // Save session on page unload
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (!sessionStartRef.current) return
+      const { mode: sMode, start, topic } = sessionStartRef.current
+      const duration = Math.round((Date.now() - start) / 1000)
+      if (duration < 10) return
+      const entry: SessionEntry = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        date: new Date().toISOString(),
+        mode: sMode,
+        durationSeconds: duration,
+        examTopic: topic,
+      }
+      try {
+        const saved = localStorage.getItem('orville-sessions')
+        const existing: SessionEntry[] = saved ? JSON.parse(saved) : []
+        localStorage.setItem('orville-sessions', JSON.stringify([...existing, entry].slice(-50)))
+      } catch {}
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [])
 
   // Auto-scroll chat history
   useEffect(() => {
@@ -322,7 +384,7 @@ export function Orville() {
         utterance.pitch = 0.82
         utterance.volume = 1
 
-        let lipInterval: ReturnType<typeof setInterval>
+        let lipInterval: ReturnType<typeof setInterval> | undefined
         utterance.onstart = () => {
           lipInterval = setInterval(() => {
             setAudioAmplitude(0.05 + Math.random() * 0.2)
@@ -352,7 +414,7 @@ export function Orville() {
       }
 
       // Echo-clearing pause — still in 'speaking' state visually
-      await new Promise((r) => setTimeout(r, 400))
+      await new Promise((r) => setTimeout(r, 800))
     } finally {
       // Always release the lock and reset status, even if an error occurred
       isSpeakingRef.current = false
@@ -388,13 +450,18 @@ export function Orville() {
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: newMessages, mode: activeMode, notes: notesRef.current, level: userLevel }),
+          body: JSON.stringify({ messages: newMessages, mode: activeMode, notes: notesRef.current, level: userLevel, courses: userCoursesRef.current }),
           signal: chatController.signal,
         })
         clearTimeout(chatTimeout)
 
         const data = await res.json()
         if (!res.ok) {
+          if (data.error === 'daily_limit_reached') {
+            await speak("You've reached your daily message limit. Come back tomorrow to keep studying.")
+            setStatus('idle')
+            return
+          }
           console.error('Chat API error:', res.status, data.error || data)
         }
         if (data.message) {
@@ -427,19 +494,43 @@ export function Orville() {
   // without creating circular dependency issues.
   useEffect(() => { handleUserMessageRef.current = handleUserMessage }, [handleUserMessage])
 
+  const handleFeedbackSubmit = useCallback(async () => {
+    try {
+      await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lastResponse,
+          note: feedbackNote,
+          mode,
+          timestamp: new Date().toISOString(),
+        }),
+      })
+    } catch { /* log failure silently — feedback is best-effort */ }
+    setFeedbackSent(true)
+    setTimeout(() => {
+      setShowFeedback(false)
+      setFeedbackNote('')
+      setFeedbackSent(false)
+    }, 2000)
+  }, [lastResponse, feedbackNote, mode])
+
   // ── Voice recognition ──────────────────────────────────────────────────────
 
-  const handleVoiceResult: (transcript: string) => void = useCallback(
+  const handleVoiceResult = useCallback(
     (transcript: string) => {
       // ── Initialization phases ──────────────────────────────────────────────
       if (appPhaseRef.current === 'awaiting_name') {
+        // Ignore very short results — likely mic echo or ambient noise from TTS playback
+        if (transcript.trim().length < 2) {
+          startListeningRef.current()
+          return
+        }
         // Extract name from common intro patterns ("I'm Zach", "my name is Zach", etc.)
-        // Fall back to the last word of the transcript, then "there".
+        // Falls back to the last word of the transcript, then "there".
         const nameMatch = transcript.match(
           /\b(?:i'?m|i\s+am|name(?:'s|\s+is)?|call\s+me)\s+([a-zA-Z]+)/i
         )
-        // Non-name words that should never be accepted as a name
-        const NON_NAMES = new Set(['i', 'a', 'an', 'the', 'my', 'is', 'am', 'are', 'its', 'it', 'name', 'what', 'hi', 'hey', 'hello', 'just', 'uh', 'um'])
         const raw = nameMatch?.[1] ?? transcript.trim().split(/\s+/).pop() ?? ''
         const candidate = raw.toLowerCase()
         const name = (raw && !NON_NAMES.has(candidate))
@@ -447,38 +538,57 @@ export function Orville() {
           : 'there'
         setUserName(name)
         try { localStorage.setItem('orville-username', name) } catch { /* ignore */ }
+        setAppPhase('awaiting_year')
+        appPhaseRef.current = 'awaiting_year'
+        speak(
+          `Nice to meet you, ${name}! I want to make sure I teach at the right level. What year of law school are you in? 1L, 2L, 3L, or LLM?`
+        ).then(() => startListeningRef.current()).catch(() => startListeningRef.current())
+        return
+      }
+
+      if (appPhaseRef.current === 'awaiting_year') {
+        const t = transcript.toLowerCase()
+        let year = 'Other'
+        if (/\b(1l|first.year|1st.year|one.l)\b/.test(t)) year = '1L'
+        else if (/\b(2l|second.year|2nd.year|two.l)\b/.test(t)) year = '2L'
+        else if (/\b(3l|third.year|3rd.year|three.l)\b/.test(t)) year = '3L'
+        else if (/\b(llm|l\.l\.m|masters?)\b/.test(t)) year = 'LLM'
+        setUserYear(year)
+        setUserLevel(year)
+        try { localStorage.setItem('orville-year', year) } catch { /* ignore */ }
+        try { localStorage.setItem('orville-level', year) } catch { /* ignore */ }
+        setAppPhase('awaiting_courses')
+        appPhaseRef.current = 'awaiting_courses'
+        speak(`Got it. What subjects are you taking this semester? Just name them.`)
+          .then(() => startListeningRef.current())
+          .catch(() => startListeningRef.current())
+        return
+      }
+
+      if (appPhaseRef.current === 'awaiting_courses') {
+        const rawCourses = transcript
+          .split(/,|\band\b/i)
+          .map(s => s.trim())
+          .filter(s => s.length > 2)
+          .map(s =>
+            s.split(' ')
+              .filter(w => w.length > 0)
+              .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+              .join(' ')
+          )
+          .filter(s => s.trim().length > 0)
+        setUserCourses(rawCourses)
+        try { localStorage.setItem('orville-courses', JSON.stringify(rawCourses)) } catch { /* ignore */ }
         setAppPhase('awaiting_mode')
         appPhaseRef.current = 'awaiting_mode'
         speak(
-          `Hi ${name}! What do you want to work on today? We can simply talk a topic out, work through something Socratically, or run an exam prep session.`
+          `Got it. If you want to update your courses later, you can do that in your profile. Now, what do you want to work on? We can discuss a topic, work through it Socratically, or run an exam prep session.`
         ).then(() => startListeningRef.current()).catch(() => startListeningRef.current())
         return
       }
 
       if (appPhaseRef.current === 'awaiting_mode') {
         handleModeDetectionRef.current(transcript)
-        return
-      }
-
-      if (appPhaseRef.current === 'awaiting_level') {
-        const t = transcript.toLowerCase()
-        let level = ''
-        if (/\b(1l|first.?year|1st.?year|one l)\b/.test(t))   level = '1L'
-        else if (/\b(2l|second.?year|2nd.?year|two l)\b/.test(t)) level = '2L'
-        else if (/\b(3l|third.?year|3rd.?year|three l)\b/.test(t)) level = '3L'
-        else if (/\bbar\b/.test(t))                            level = 'Bar Prep'
-        else if (/\bllm\b/.test(t))                            level = 'LLM'
-        else                                                   level = transcript.trim().slice(0, 30)
-        if (level) {
-          setUserLevel(level)
-          try { localStorage.setItem('orville-level', level) } catch { /* ignore */ }
-        }
-        setAppPhase('active')
-        appPhaseRef.current = 'active'
-        const notesHint = notesRef.current.trim() ? '' : ' If you want to upload notes so I can tailor it to your class, use the button below.'
-        speak(`Got it.${notesHint} What topic or area of law should we work on?`)
-          .then(() => startListeningRef.current())
-          .catch(() => startListeningRef.current())
         return
       }
 
@@ -491,6 +601,46 @@ export function Orville() {
           handleExamTopicVoiceRef.current(pendingTopicRef.current)
         }
         // "yes/upload" → user must use the button (browser security requires user gesture for file input)
+        return
+      }
+
+      // Handle read-aloud decision after fact pattern streams in
+      if (awaitingReadRef.current) {
+        awaitingReadRef.current = false
+        const t = transcript.toLowerCase()
+        const wantsRead = /\b(yes|yeah|sure|please|go ahead|read it|read|yep|ok|okay|yea)\b/.test(t)
+        const askTalkOrWrite = () => {
+          speak('Want to talk through the facts first, or go straight to writing your answer?')
+            .then(() => {
+              awaitingStartRef.current = true
+              startListeningRef.current()
+            })
+        }
+        if (wantsRead) {
+          speak(factPatternRef.current).then(askTalkOrWrite)
+        } else {
+          askTalkOrWrite()
+        }
+        return
+      }
+
+      // Handle talk-or-write decision
+      if (awaitingStartRef.current) {
+        awaitingStartRef.current = false
+        const t = transcript.toLowerCase()
+        setExamStep('issuespotting')
+        examStepRef.current = 'issuespotting'
+        setShowIsDoneButton(true)
+        if (/\b(talk|discuss|go over|walk|verbal|voice|speak|facts|sure|yes|yeah|yep)\b/.test(t)) {
+          speak("Let's go. Talk me through what issues you're seeing.")
+            .then(() => startListeningRef.current())
+        } else {
+          setExamStep('writtenanswer')
+          examStepRef.current = 'writtenanswer'
+          setShowIsDoneButton(false)
+          setShowWrittenInput(true)
+          speak("Take your time — write your full IRAC answer below.")
+        }
         return
       }
 
@@ -681,6 +831,30 @@ export function Orville() {
     setShowNotesPrompt(false)
     showNotesPromptRef.current = false
     pendingTopicRef.current = ''
+    awaitingReadRef.current = false
+    awaitingStartRef.current = false
+
+    // Save previous session before starting a new one
+    if (sessionStartRef.current) {
+      const { mode: prevMode, start, topic } = sessionStartRef.current
+      const duration = Math.round((Date.now() - start) / 1000)
+      if (duration >= 10) {
+        const entry: SessionEntry = {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          date: new Date().toISOString(),
+          mode: prevMode,
+          durationSeconds: duration,
+          examTopic: topic,
+        }
+        setSessions(prev => [...prev, entry].slice(-50))
+      }
+    }
+    sessionStartRef.current = { mode: selectedMode, start: Date.now() }
+    fetch('/api/analytics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event: 'session_start', mode: selectedMode, level: userYearRef.current }),
+    }).catch(() => {})
 
     const defaultGreetings: Record<Mode, string> = {
       discussion: "Discussion mode. What case or concept do you want to dig into?",
@@ -723,6 +897,12 @@ export function Orville() {
     setAppPhase('active')
     appPhaseRef.current = 'active'
     setMessages([])
+    sessionStartRef.current = { mode: detectedMode, start: Date.now() }
+    fetch('/api/analytics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event: 'session_start', mode: detectedMode, level: userYearRef.current }),
+    }).catch(() => {})
     handleUserMessageRef.current(transcript, detectedMode)
   }, [selectMode])
 
@@ -733,13 +913,13 @@ export function Orville() {
   const handleExamTopicVoice = useCallback(
     async (topic: string) => {
       lastExamTopicRef.current = topic
+      if (sessionStartRef.current) sessionStartRef.current.topic = topic
       setExamStep('factpattern')
       examStepRef.current = 'factpattern'
       setLiveTranscript('')
 
-      // Brief spoken cue while the API generates the fact pattern
       await speak('Sure, give me just a couple of seconds to put one together.')
-      setLastResponse('')  // spoken only — don't leave it on screen
+      setLastResponse('')
       setStatus('thinking')
 
       const newMessages: Message[] = [
@@ -749,31 +929,59 @@ export function Orville() {
       setMessages(newMessages)
 
       const examController = new AbortController()
-      const examTimeout = setTimeout(() => examController.abort(), 20000)
+      const examTimeout = setTimeout(() => examController.abort(), 45000)
       try {
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: newMessages, mode: 'examprep', notes: notesRef.current, level: userLevel }),
+          body: JSON.stringify({ messages: newMessages, mode: 'examprep', notes: notesRef.current, level: userLevel, courses: userCoursesRef.current, stream: true }),
           signal: examController.signal,
         })
         clearTimeout(examTimeout)
-        const data = await res.json()
-        if (data.message) {
-          setFactPattern(data.message)
-          setShowFactPanel(true)
-          setMessages((prev) => [...prev, { role: 'assistant', content: data.message }])
-          await speak("Here's your fact pattern. Spot all the issues you can — and don't worry about full analysis just yet.")
-          await speak(data.message)
-          setExamStep('issuespotting')
-          examStepRef.current = 'issuespotting'
-          setShowIsDoneButton(true)
-          startListeningRef.current()
-        } else {
+
+        if (!res.ok) {
+          try {
+            const data = await res.json()
+            if (data.error === 'daily_limit_reached') {
+              await speak("You've reached your daily message limit. Come back tomorrow to keep studying.")
+              setStatus('idle')
+              return
+            }
+          } catch {}
           setStatus('idle')
           startListeningRef.current()
+          return
         }
+        if (!res.body) {
+          setStatus('idle')
+          startListeningRef.current()
+          return
+        }
+
+        setFactPattern('')
+        setShowFactPanel(true)
+
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let fullText = ''
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          const chunk = decoder.decode(value, { stream: true })
+          fullText += chunk
+          setFactPattern(fullText)
+          factPatternRef.current = fullText
+        }
+
+        setMessages((prev) => [...prev, { role: 'assistant', content: fullText }])
+        setStatus('idle')
+
+        await speak("Your fact pattern is ready. Should I read it to you?")
+        awaitingReadRef.current = true
+        startListeningRef.current()
       } catch (err) {
+        clearTimeout(examTimeout)
         console.error('Exam prep error:', err)
         setStatus('idle')
         startListeningRef.current()
@@ -853,7 +1061,7 @@ export function Orville() {
         {/* Title + mode indicator */}
         <div className="absolute top-6 left-0 right-0 flex flex-col items-center z-30 pointer-events-none">
           <h1
-            className="text-2xl tracking-[0.3em] uppercase font-light text-gray-400"
+            className="text-2xl uppercase font-light text-gray-400"
             style={{ fontFamily: "'Cinzel', Georgia, serif", letterSpacing: '0.35em' }}
           >
             ORVILLE
@@ -862,6 +1070,16 @@ export function Orville() {
             {mode ? MODE_LABELS[mode] : 'Your Personal AI Law Tutor'}
           </p>
         </div>
+
+        {/* Profile button */}
+        {hasGreeted && (
+          <button
+            className="absolute top-6 left-6 z-30 text-xs text-gray-600 hover:text-gray-400 tracking-widest uppercase transition-colors duration-200 pointer-events-auto"
+            onClick={() => setShowProfile(true)}
+          >
+            Profile
+          </button>
+        )}
 
         {/* Mode selector button */}
         {hasGreeted && (
@@ -1099,27 +1317,42 @@ export function Orville() {
         <div className={`w-[42%] max-w-[520px] min-w-[260px] flex flex-col border-l ${THEME.docPanel.border} ${THEME.docPanel.bg} pointer-events-auto`}>
           {/* Header */}
           <div className={`flex items-center justify-between px-5 py-3 border-b ${THEME.docPanel.border}`}>
-            <span
-              className={`text-[10px] uppercase tracking-[0.3em] font-light ${THEME.docPanel.header}`}
-              style={{ fontFamily: "'Cinzel', Georgia, serif" }}
-            >
+            <span className={`font-sans text-[10px] uppercase tracking-[0.3em] font-light ${THEME.docPanel.header}`}>
               Fact Pattern
             </span>
-            <button
-              onClick={downloadFactPattern}
-              className={`text-[10px] uppercase tracking-widest transition-colors ${THEME.docPanel.download}`}
-            >
-              ↓ Download
-            </button>
+            <div className="flex items-center gap-4">
+              {factPattern && (
+                <button
+                  onClick={downloadFactPattern}
+                  className={`text-[10px] uppercase tracking-widest transition-colors ${THEME.docPanel.download}`}
+                >
+                  ↓ Download
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  setShowFactPanel(false)
+                  awaitingReadRef.current = false
+                  awaitingStartRef.current = false
+                }}
+                className={`text-[10px] uppercase tracking-widest transition-colors ${THEME.docPanel.download}`}
+              >
+                ✕
+              </button>
+            </div>
           </div>
 
           {/* Body */}
           <div className="flex-1 overflow-y-auto px-6 py-5">
-            {factPattern.split('\n\n').filter(Boolean).map((para, i) => (
-              <p key={i} className={`text-base leading-relaxed mb-5 last:mb-0 ${THEME.docPanel.body}`}>
-                {para.trim()}
-              </p>
-            ))}
+            {factPattern ? (
+              factPattern.split('\n\n').filter(Boolean).map((para, i) => (
+                <p key={i} className={`text-base leading-relaxed mb-5 last:mb-0 ${THEME.docPanel.body}`}>
+                  {para.trim()}
+                </p>
+              ))
+            ) : (
+              <p className={`text-sm animate-pulse ${THEME.docPanel.hint}`}>Generating…</p>
+            )}
           </div>
 
           {/* Footer hint */}
@@ -1140,10 +1373,7 @@ export function Orville() {
           style={{ background: 'rgba(0,0,0,0.85)' }}
         >
           <div className="flex flex-col items-center gap-6 px-8 py-10 max-w-md w-full">
-            <h2
-              className="text-lg tracking-[0.3em] uppercase text-gray-400 font-light"
-              style={{ fontFamily: "'Cinzel', Georgia, serif" }}
-            >
+            <h2 className="font-sans text-lg tracking-[0.3em] uppercase text-gray-400 font-light">
               Choose Mode
             </h2>
 
@@ -1157,10 +1387,7 @@ export function Orville() {
                     : 'border-gray-800 hover:border-gray-600 bg-gray-950 hover:bg-gray-900'
                 }`}
               >
-                <span
-                  className="block text-sm text-gray-200 mb-1"
-                  style={{ fontFamily: "'Cinzel', Georgia, serif" }}
-                >
+                <span className="font-sans block text-sm text-gray-200 mb-1">
                   {MODE_LABELS[m]}
                 </span>
                 <span className="block text-xs text-gray-500 leading-relaxed">
@@ -1193,6 +1420,105 @@ export function Orville() {
       {/* First-time walkthrough */}
       {showWalkthrough && (
         <Walkthrough onDone={() => setShowWalkthrough(false)} />
+      )}
+
+      {/* Profile modal */}
+      {showProfile && (
+        <ProfileModal
+          onClose={() => setShowProfile(false)}
+          userName={userName}
+          userYear={userYear}
+          userCourses={userCourses}
+          sessions={sessions}
+          onSave={({ name, year, courses }) => {
+            if (name) {
+              setUserName(name)
+              try { localStorage.setItem('orville-username', name) } catch {}
+            }
+            setUserYear(year)
+            setUserLevel(year)
+            try { localStorage.setItem('orville-year', year) } catch {}
+            try { localStorage.setItem('orville-level', year) } catch {}
+            setUserCourses(courses)
+            try { localStorage.setItem('orville-courses', JSON.stringify(courses)) } catch {}
+          }}
+        />
+      )}
+
+      {/* Feedback button — bottom-left, always visible after greeting */}
+      {hasGreeted && !showFeedback && (
+        <button
+          className="absolute bottom-6 left-6 z-20 text-xs text-gray-800 hover:text-gray-600 tracking-widest uppercase transition-colors pointer-events-auto"
+          onClick={() => setShowFeedback(true)}
+        >
+          Feedback
+        </button>
+      )}
+
+      {/* Feedback overlay */}
+      {showFeedback && (
+        <div
+          className="absolute inset-0 z-40 flex items-center justify-center pointer-events-auto"
+          style={{ background: 'rgba(0,0,0,0.88)' }}
+        >
+          <div className="flex flex-col gap-5 px-8 py-8 max-w-sm w-full">
+            {feedbackSent ? (
+              <p className="text-green-400 text-sm text-center tracking-widest">
+                Thanks — received.
+              </p>
+            ) : (
+              <>
+                <h3 className="font-sans text-xs tracking-[0.3em] uppercase text-gray-500">
+                  Send Feedback
+                </h3>
+                {lastResponse && (
+                  <div className="bg-gray-950 border border-gray-800 rounded p-3 max-h-24 overflow-y-auto">
+                    <span className="block text-[10px] text-gray-700 uppercase tracking-widest mb-1">Last response</span>
+                    <span className="text-xs text-gray-500 leading-relaxed">{lastResponse}</span>
+                  </div>
+                )}
+                <textarea
+                  value={feedbackNote}
+                  onChange={(e) => setFeedbackNote(e.target.value)}
+                  placeholder="What went wrong, or what could be better?"
+                  className="bg-gray-950 border border-gray-700 rounded p-3 text-xs text-gray-300 leading-relaxed resize-none h-24 focus:outline-none focus:border-purple-600 transition-colors"
+                />
+                <div className="flex justify-between items-center">
+                  <button
+                    onClick={() => setShowFeedback(false)}
+                    className="text-xs text-gray-700 hover:text-gray-500 uppercase tracking-widest transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleFeedbackSubmit}
+                    className="px-5 py-2 text-xs uppercase tracking-widest border border-gray-700 text-gray-400 hover:border-gray-400 hover:text-gray-200 rounded transition-colors"
+                  >
+                    Send →
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Browser warning — shown when Web Speech API is unavailable (Firefox, Safari) */}
+      {!browserSupported && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black bg-opacity-96 pointer-events-auto">
+          <div className="flex flex-col items-center gap-6 px-8 py-10 max-w-sm text-center">
+            <h2 className="font-sans text-xl uppercase font-light text-gray-200 tracking-[0.2em]">
+              Chrome Required
+            </h2>
+            <p className="text-sm text-gray-500 leading-relaxed">
+              Orville is a voice-first tutor and requires Chrome for microphone support.
+              Open this page in Chrome on desktop or Android to get started.
+            </p>
+            <p className="text-xs text-gray-700 tracking-widest uppercase">
+              Safari and Firefox do not support voice input.
+            </p>
+          </div>
+        </div>
       )}
     </div>
   )

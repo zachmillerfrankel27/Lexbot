@@ -62,15 +62,7 @@ void main(){
 }
 `
 
-// ─── Fragment shader — v8 ─────────────────────────────────────────────────────
-// • Tiny domain warp (magnitude 0.10) — organic shape deformation without
-//   the correlated global pulse that large warp caused in v5
-// • Fine turbulence offset on veil mask input — makes veil edges ragged and
-//   gossamer (wispy) without ridge-noise circuit-board traces
-// • Two anti-correlated large veil layers moving in opposite directions
-// • Vivid electric palette: blue (0.12,0.30,1.0) / purple (0.60,0.10,1.0)
-// • Large bright core: lower threshold → looks like internal energy source
-// • Speed raised to idle 0.35 / speaking 0.65 so it visibly flows
+// ─── Fragment shader ──────────────────────────────────────────────────────────
 
 const FRAGMENT_SHADER = /* glsl */`
 ${NOISE_GLSL}
@@ -119,7 +111,7 @@ void main(){
   col += veilCol * v1 * 0.90;
   col += vec3(0.45, 0.12, 0.95) * v2 * 0.70;
 
-  // Large bright core — internal energy source, covers wider area than v7
+  // Large bright core — internal energy source
   float core = smoothstep(0.30, 0.65, p1 * p2);
   col += vec3(0.85, 0.92, 1.00) * core * 3.0 * (0.40 + uEnergy * 0.60);
 
@@ -289,6 +281,46 @@ function OrbParticles({ isSpeaking, isListening }: { isSpeaking: boolean; isList
   )
 }
 
+// ─── Bloom billboard ─────────────────────────────────────────────────────────
+
+const GLOW_VERT = /* glsl */`
+varying vec2 vUv;
+void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+`
+
+const GLOW_FRAG = /* glsl */`
+varying vec2 vUv;
+void main(){
+  float d = length(vUv - 0.5) * 2.0;
+  float g = exp(-d * d * 0.9) * smoothstep(1.0, 0.0, d);
+  vec3 col = mix(vec3(0.18, 0.44, 1.00), vec3(0.42, 0.10, 0.90), pow(d, 0.5));
+  gl_FragColor = vec4(col * g, g * 0.55);
+}
+`
+
+function GlowBillboard() {
+  const meshRef = useRef<THREE.Mesh>(null!)
+
+  const material = useMemo(() => new THREE.ShaderMaterial({
+    vertexShader:   GLOW_VERT,
+    fragmentShader: GLOW_FRAG,
+    transparent: true,
+    depthWrite:  false,
+    blending:    THREE.AdditiveBlending,
+    side:        THREE.DoubleSide,
+  }), [])
+
+  useFrame(({ camera }) => {
+    if (meshRef.current) meshRef.current.quaternion.copy(camera.quaternion)
+  })
+
+  return (
+    <mesh ref={meshRef} material={material}>
+      <planeGeometry args={[1.6, 1.6]} />
+    </mesh>
+  )
+}
+
 // ─── Exported Avatar ──────────────────────────────────────────────────────────
 
 export function Avatar({ isSpeaking, isListening, isThinking, audioAmplitude, onClick }: AvatarProps) {
@@ -301,16 +333,15 @@ export function Avatar({ isSpeaking, isListening, isThinking, audioAmplitude, on
         audioAmplitude={audioAmplitude}
       />
       <OrbParticles isSpeaking={isSpeaking} isListening={isListening} />
+      <GlowBillboard />
 
       <EffectComposer>
-        {/* luminanceThreshold=0: all pixels get proportional soft glow,
-            no threshold boundary to flicker across */}
         <Bloom
-          luminanceThreshold={0.08}
+          luminanceThreshold={0.05}
           luminanceSmoothing={0.95}
-          height={70}
-          intensity={0.42}
-          kernelSize={2}
+          height={100}
+          intensity={0.65}
+          kernelSize={4}
         />
       </EffectComposer>
     </group>

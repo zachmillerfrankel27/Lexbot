@@ -3,13 +3,13 @@ import Anthropic from '@anthropic-ai/sdk'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-// ── Simple in-process rate limiter ─────────────────────────────────────────
-// Limits each IP to RATE_LIMIT_MAX requests per RATE_LIMIT_WINDOW_MS.
-// Note: serverless instances don't share memory, so this guards against burst
-// abuse within a single instance. The invite-code gate is the primary guard.
+// ── In-process rate limiters ────────────────────────────────────────────────
+// Note: serverless instances don't share memory. These guard against burst
+// abuse within a single instance; the invite-code gate is the primary guard.
+
+// Per-IP burst limiter
 const RATE_LIMIT_MAX = Number(process.env.RATE_LIMIT_MAX ?? 20)
 const RATE_LIMIT_WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS ?? 60_000)
-
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>()
 
 function isRateLimited(ip: string): boolean {
@@ -20,6 +20,24 @@ function isRateLimited(ip: string): boolean {
     return false
   }
   if (entry.count >= RATE_LIMIT_MAX) return true
+  entry.count++
+  return false
+}
+
+// Per-invite-code daily message cap (set DAILY_MESSAGE_LIMIT env var to configure)
+const DAILY_LIMIT = Number(process.env.DAILY_MESSAGE_LIMIT ?? 50)
+const DAILY_WINDOW_MS = 24 * 60 * 60 * 1000
+const dailyUsageMap = new Map<string, { count: number; resetAt: number }>()
+
+function isDailyLimitReached(code: string): boolean {
+  if (!code || !DAILY_LIMIT) return false
+  const now = Date.now()
+  const entry = dailyUsageMap.get(code)
+  if (!entry || now > entry.resetAt) {
+    dailyUsageMap.set(code, { count: 1, resetAt: now + DAILY_WINDOW_MS })
+    return false
+  }
+  if (entry.count >= DAILY_LIMIT) return true
   entry.count++
   return false
 }
@@ -80,14 +98,16 @@ export async function POST(req: NextRequest) {
 
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown'
   if (isRateLimited(ip)) {
-    return NextResponse.json(
-      { error: 'Too many requests. Please slow down.' },
-      { status: 429 }
-    )
+    return NextResponse.json({ error: 'Too many requests. Please slow down.' }, { status: 429 })
+  }
+
+  const inviteCode = req.cookies.get('orville-access')?.value ?? ''
+  if (isDailyLimitReached(inviteCode)) {
+    return NextResponse.json({ error: 'daily_limit_reached' }, { status: 429 })
   }
 
   try {
-    const { messages, mode, notes, level } = await req.json()
+    const { messages, mode, notes, level, courses, stream } = await req.json()
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json({ error: 'Invalid messages format' }, { status: 400 })
@@ -96,12 +116,53 @@ export async function POST(req: NextRequest) {
     const selectedMode = mode && SYSTEM_PROMPTS[mode] ? mode : 'discussion'
     let systemPrompt = SYSTEM_PROMPTS[selectedMode]
 
-    if (level && typeof level === 'string' && level.trim() && selectedMode === 'examprep') {
-      systemPrompt += `\n\nSTUDENT LEVEL: ${level.trim()}. Calibrate fact pattern complexity, issue density, and analytical depth accordingly.`
+    if (level && typeof level === 'string' && level.trim()) {
+      if (selectedMode === 'examprep') {
+        systemPrompt += `\n\nSTUDENT LEVEL: ${level.trim()}. Calibrate fact pattern complexity, issue density, and analytical depth accordingly.`
+      } else {
+        systemPrompt += `\n\nSTUDENT LEVEL: ${level.trim()}. Calibrate your explanations and examples to this stage of legal education.`
+      }
+    }
+
+    if (courses && Array.isArray(courses) && courses.length > 0) {
+      systemPrompt += `\n\nSTUDENT COURSES THIS SEMESTER: ${courses.join(', ')}. Connect your examples and explanations to these subjects where relevant.`
     }
 
     if (notes && notes.trim()) {
       systemPrompt += `\n\nSTUDENT NOTES/OUTLINE (use these to tailor fact patterns, flag coverage gaps, and calibrate grading — do not dump the full text back at the student, just reference relevant parts contextually):\n${notes.trim()}`
+    }
+
+    if (stream) {
+      const encoder = new TextEncoder()
+      const readable = new ReadableStream({
+        async start(controller) {
+          try {
+            const streamResponse = client.messages.stream({
+              model: 'claude-sonnet-4-6',
+              max_tokens: selectedMode === 'examprep' ? 800 : 180,
+              system: systemPrompt,
+              messages,
+            })
+            for await (const event of streamResponse) {
+              if (
+                event.type === 'content_block_delta' &&
+                event.delta.type === 'text_delta'
+              ) {
+                controller.enqueue(encoder.encode(event.delta.text))
+              }
+            }
+            controller.close()
+          } catch (err) {
+            controller.error(err)
+          }
+        },
+      })
+      return new NextResponse(readable, {
+        headers: {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Cache-Control': 'no-store',
+        },
+      })
     }
 
     const response = await client.messages.create({

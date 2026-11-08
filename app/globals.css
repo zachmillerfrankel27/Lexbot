@@ -4,15 +4,6 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --bg-deep: #000000;
-  --bg-mid: #040210;
-  --bg-near: #0a051a;
-  --blue: #4466ff;
-  --purple: #9933ff;
-  --gold: #f5c842;
-}
-
 * {
   box-sizing: border-box;
 }

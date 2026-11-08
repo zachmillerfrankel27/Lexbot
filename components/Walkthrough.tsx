@@ -35,9 +35,9 @@ const STEPS = [
     footer: 'Switch modes anytime from the bottom of the screen.',
   },
   {
-    label: 'Privacy',
-    title: 'Before You Begin',
-    body: 'Your conversations are sent to Anthropic\'s Claude AI to generate responses, and to ElevenLabs to produce Orville\'s voice. Conversation history is stored only in your browser. Nothing is sold or shared with third parties.',
+    label: 'Before You Begin',
+    title: 'A Few Things',
+    body: "Orville is an AI tutor. He's smart — really smart — but can sometimes make mistakes. He has reliable, high-quality legal training, but you should still feel free to verify doctrine with your casebook, professor, or TAs. If Orville makes a mistake, please let us know so we can send him to office hours. Nothing Orville says constitutes legal advice.\n\nMost importantly, know that we will NEVER use your voice or identifiable information to train Orville. Your voice is transcribed in real time by your browser and is never recorded, stored, or used to train any AI model. Your conversations are processed by Anthropic's Claude AI to generate responses and by ElevenLabs to produce Orville's voice, under their respective privacy policies, which don't make us act as training data sources. Nothing is stored on our servers or sold to third parties. Your voice is yours, nobody else's.",
     footer: 'By continuing you agree to our Privacy Policy.',
   },
 ]
@@ -86,15 +86,12 @@ export function Walkthrough({ onDone }: WalkthroughProps) {
         </div>
 
         {/* Step label */}
-        <p className="text-[10px] tracking-[0.3em] uppercase text-gray-600">
+        <p className="font-sans text-[10px] tracking-[0.3em] uppercase text-gray-600">
           {current.label}
         </p>
 
         {/* Title */}
-        <h2
-          className="text-2xl tracking-[0.2em] uppercase text-gray-200 font-light text-center"
-          style={{ fontFamily: "'Cinzel', Georgia, serif" }}
-        >
+        <h2 className="font-sans text-2xl tracking-[0.2em] uppercase text-gray-200 font-light text-center">
           {current.title}
         </h2>
 
@@ -106,10 +103,7 @@ export function Walkthrough({ onDone }: WalkthroughProps) {
                 key={m.name}
                 className="px-5 py-4 rounded-lg border border-gray-800 bg-gray-950"
               >
-                <span
-                  className="block text-sm text-gray-200 mb-1"
-                  style={{ fontFamily: "'Cinzel', Georgia, serif" }}
-                >
+                <span className="font-sans block text-sm text-gray-200 mb-1">
                   {m.name}
                 </span>
                 <span className="block text-xs text-gray-500 leading-relaxed">
@@ -119,9 +113,13 @@ export function Walkthrough({ onDone }: WalkthroughProps) {
             ))}
           </div>
         ) : (
-          <p className="text-sm text-gray-400 leading-relaxed text-center">
-            {current.body}
-          </p>
+          <div className="flex flex-col gap-4">
+            {(current.body ?? '').split('\n\n').map((para, i) => (
+              <p key={i} className="text-sm text-gray-400 leading-relaxed text-center">
+                {para}
+              </p>
+            ))}
+          </div>
         )}
 
         {/* Footer note */}
@@ -155,8 +153,7 @@ export function Walkthrough({ onDone }: WalkthroughProps) {
           {isLast ? (
             <button
               onClick={finish}
-              className="px-8 py-3 text-xs tracking-widest uppercase border border-yellow-700 text-yellow-500 hover:border-yellow-500 hover:text-yellow-300 rounded transition-colors duration-200"
-              style={{ fontFamily: "'Cinzel', Georgia, serif" }}
+              className="font-sans px-8 py-3 text-xs tracking-widest uppercase border border-yellow-700 text-yellow-500 hover:border-yellow-500 hover:text-yellow-300 rounded transition-colors duration-200"
             >
               Let's Begin
             </button>
