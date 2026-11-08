@@ -35,9 +35,9 @@ const STEPS = [
     footer: 'Switch modes anytime from the bottom of the screen.',
   },
   {
-    label: 'Privacy',
-    title: 'Before You Begin',
-    body: 'Your conversations are sent to Anthropic\'s Claude AI to generate responses, and to ElevenLabs to produce Orville\'s voice. Conversation history is stored only in your browser. Nothing is sold or shared with third parties.',
+    label: 'Before You Begin',
+    title: 'A Few Things',
+    body: "Orville is an AI tutor. He's smart — really smart — but can sometimes make mistakes. He has reliable, high-quality legal training, but you should still feel free to verify doctrine with your casebook, professor, or TAs. If Orville makes a mistake, please let us know so we can send him to office hours. Nothing Orville says constitutes legal advice.\n\nMost importantly, know that we will NEVER use your voice or identifiable information to train Orville. Your voice is transcribed in real time by your browser and is never recorded, stored, or used to train any AI model. Your conversations are processed by Anthropic's Claude AI and ElevenLabs under their respective privacy policies. Nothing is stored on our servers or sold to third parties. Your voice is yours, nobody else's.",
     footer: 'By continuing you agree to our Privacy Policy.',
   },
 ]
@@ -119,9 +119,13 @@ export function Walkthrough({ onDone }: WalkthroughProps) {
             ))}
           </div>
         ) : (
-          <p className="text-sm text-gray-400 leading-relaxed text-center">
-            {current.body}
-          </p>
+          <div className="flex flex-col gap-4">
+            {(current.body ?? '').split('\n\n').map((para, i) => (
+              <p key={i} className="text-sm text-gray-400 leading-relaxed text-center">
+                {para}
+              </p>
+            ))}
+          </div>
         )}
 
         {/* Footer note */}
