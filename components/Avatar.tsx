@@ -292,9 +292,9 @@ const GLOW_FRAG = /* glsl */`
 varying vec2 vUv;
 void main(){
   float d = length(vUv - 0.5) * 2.0;
-  float g = exp(-d * d * 1.4) * smoothstep(1.0, 0.05, d);
+  float g = exp(-d * d * 0.9) * smoothstep(1.0, 0.0, d);
   vec3 col = mix(vec3(0.18, 0.44, 1.00), vec3(0.42, 0.10, 0.90), pow(d, 0.5));
-  gl_FragColor = vec4(col * g, g * 0.44);
+  gl_FragColor = vec4(col * g, g * 0.55);
 }
 `
 
@@ -316,7 +316,7 @@ function GlowBillboard() {
 
   return (
     <mesh ref={meshRef} material={material}>
-      <planeGeometry args={[4.4, 4.4]} />
+      <planeGeometry args={[1.6, 1.6]} />
     </mesh>
   )
 }
@@ -337,11 +337,11 @@ export function Avatar({ isSpeaking, isListening, isThinking, audioAmplitude, on
 
       <EffectComposer>
         <Bloom
-          luminanceThreshold={0.08}
+          luminanceThreshold={0.05}
           luminanceSmoothing={0.95}
-          height={70}
-          intensity={0.42}
-          kernelSize={2}
+          height={100}
+          intensity={0.65}
+          kernelSize={4}
         />
       </EffectComposer>
     </group>

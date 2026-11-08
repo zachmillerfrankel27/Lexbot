@@ -1110,10 +1110,7 @@ export function Orville() {
         <div className={`w-[42%] max-w-[520px] min-w-[260px] flex flex-col border-l ${THEME.docPanel.border} ${THEME.docPanel.bg} pointer-events-auto`}>
           {/* Header */}
           <div className={`flex items-center justify-between px-5 py-3 border-b ${THEME.docPanel.border}`}>
-            <span
-              className={`text-[10px] uppercase tracking-[0.3em] font-light ${THEME.docPanel.header}`}
-              style={{ fontFamily: "'Cinzel', Georgia, serif" }}
-            >
+            <span className={`font-sans text-[10px] uppercase tracking-[0.3em] font-light ${THEME.docPanel.header}`}>
               Fact Pattern
             </span>
             <button
@@ -1151,10 +1148,7 @@ export function Orville() {
           style={{ background: 'rgba(0,0,0,0.85)' }}
         >
           <div className="flex flex-col items-center gap-6 px-8 py-10 max-w-md w-full">
-            <h2
-              className="text-lg tracking-[0.3em] uppercase text-gray-400 font-light"
-              style={{ fontFamily: "'Cinzel', Georgia, serif" }}
-            >
+            <h2 className="font-sans text-lg tracking-[0.3em] uppercase text-gray-400 font-light">
               Choose Mode
             </h2>
 
@@ -1168,10 +1162,7 @@ export function Orville() {
                     : 'border-gray-800 hover:border-gray-600 bg-gray-950 hover:bg-gray-900'
                 }`}
               >
-                <span
-                  className="block text-sm text-gray-200 mb-1"
-                  style={{ fontFamily: "'Cinzel', Georgia, serif" }}
-                >
+                <span className="font-sans block text-sm text-gray-200 mb-1">
                   {MODE_LABELS[m]}
                 </span>
                 <span className="block text-xs text-gray-500 leading-relaxed">
@@ -1229,10 +1220,7 @@ export function Orville() {
               </p>
             ) : (
               <>
-                <h3
-                  className="text-xs tracking-[0.3em] uppercase text-gray-500"
-                  style={{ fontFamily: "'Cinzel', Georgia, serif" }}
-                >
+                <h3 className="font-sans text-xs tracking-[0.3em] uppercase text-gray-500">
                   Send Feedback
                 </h3>
                 {lastResponse && (
@@ -1271,10 +1259,7 @@ export function Orville() {
       {!browserSupported && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black bg-opacity-96 pointer-events-auto">
           <div className="flex flex-col items-center gap-6 px-8 py-10 max-w-sm text-center">
-            <h2
-              className="text-xl uppercase font-light text-gray-200 tracking-[0.2em]"
-              style={{ fontFamily: "'Cinzel', Georgia, serif" }}
-            >
+            <h2 className="font-sans text-xl uppercase font-light text-gray-200 tracking-[0.2em]">
               Chrome Required
             </h2>
             <p className="text-sm text-gray-500 leading-relaxed">

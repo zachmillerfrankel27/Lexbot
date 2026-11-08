@@ -91,10 +91,7 @@ export function Walkthrough({ onDone }: WalkthroughProps) {
         </p>
 
         {/* Title */}
-        <h2
-          className="text-2xl tracking-[0.2em] uppercase text-gray-200 font-light text-center"
-          style={{ fontFamily: "'Cinzel', Georgia, serif" }}
-        >
+        <h2 className="font-sans text-2xl tracking-[0.2em] uppercase text-gray-200 font-light text-center">
           {current.title}
         </h2>
 
@@ -106,10 +103,7 @@ export function Walkthrough({ onDone }: WalkthroughProps) {
                 key={m.name}
                 className="px-5 py-4 rounded-lg border border-gray-800 bg-gray-950"
               >
-                <span
-                  className="block text-sm text-gray-200 mb-1"
-                  style={{ fontFamily: "'Cinzel', Georgia, serif" }}
-                >
+                <span className="font-sans block text-sm text-gray-200 mb-1">
                   {m.name}
                 </span>
                 <span className="block text-xs text-gray-500 leading-relaxed">
@@ -159,8 +153,7 @@ export function Walkthrough({ onDone }: WalkthroughProps) {
           {isLast ? (
             <button
               onClick={finish}
-              className="px-8 py-3 text-xs tracking-widest uppercase border border-yellow-700 text-yellow-500 hover:border-yellow-500 hover:text-yellow-300 rounded transition-colors duration-200"
-              style={{ fontFamily: "'Cinzel', Georgia, serif" }}
+              className="font-sans px-8 py-3 text-xs tracking-widest uppercase border border-yellow-700 text-yellow-500 hover:border-yellow-500 hover:text-yellow-300 rounded transition-colors duration-200"
             >
               Let's Begin
             </button>

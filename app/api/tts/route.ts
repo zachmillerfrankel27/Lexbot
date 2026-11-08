@@ -26,13 +26,13 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         text,
-        model_id: 'eleven_turbo_v2_5',
+        model_id: 'eleven_multilingual_v2',
         voice_settings: {
-          stability: 0.60,
-          similarity_boost: 0.85,
+          stability: 0.45,
+          similarity_boost: 0.75,
           style: 0.0,
           use_speaker_boost: true,
-          speed: 1.05,
+          speed: 1.0,
         },
       }),
     })
