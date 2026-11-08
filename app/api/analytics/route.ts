@@ -6,8 +6,10 @@ export async function POST(req: NextRequest) {
 
     const inviteCode = req.cookies.get('orville-access')?.value ?? 'unknown'
     const rawIp = req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown'
-    // Truncate IP to first two octets for privacy
-    const ip = rawIp.split('.').slice(0, 2).join('.') + '.x.x'
+    // Keep first two octets of IPv4; first 8 chars of IPv6 (not routable-unique)
+    const ip = rawIp.includes('.')
+      ? rawIp.split('.').slice(0, 2).join('.') + '.x.x'
+      : rawIp.slice(0, 8) + '…'
 
     console.log(
       JSON.stringify({
