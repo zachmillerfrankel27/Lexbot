@@ -337,11 +337,11 @@ export function Avatar({ isSpeaking, isListening, isThinking, audioAmplitude, on
 
       <EffectComposer>
         <Bloom
-          luminanceThreshold={0.05}
-          luminanceSmoothing={0.95}
-          height={100}
-          intensity={0.65}
-          kernelSize={4}
+          mipmapBlur
+          luminanceThreshold={0.20}
+          luminanceSmoothing={0.85}
+          intensity={0.45}
+          radius={0.75}
         />
       </EffectComposer>
     </group>
