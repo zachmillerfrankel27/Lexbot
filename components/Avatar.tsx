@@ -281,46 +281,6 @@ function OrbParticles({ isSpeaking, isListening }: { isSpeaking: boolean; isList
   )
 }
 
-// ─── Bloom billboard ─────────────────────────────────────────────────────────
-
-const GLOW_VERT = /* glsl */`
-varying vec2 vUv;
-void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
-`
-
-const GLOW_FRAG = /* glsl */`
-varying vec2 vUv;
-void main(){
-  float d = length(vUv - 0.5) * 2.0;
-  float g = exp(-d * d * 4.5) * smoothstep(1.0, 0.5, d);
-  vec3 col = mix(vec3(0.18, 0.44, 1.00), vec3(0.42, 0.10, 0.90), pow(d, 0.5));
-  gl_FragColor = vec4(col * g, g * 0.30);
-}
-`
-
-function GlowBillboard() {
-  const meshRef = useRef<THREE.Mesh>(null!)
-
-  const material = useMemo(() => new THREE.ShaderMaterial({
-    vertexShader:   GLOW_VERT,
-    fragmentShader: GLOW_FRAG,
-    transparent: true,
-    depthWrite:  false,
-    blending:    THREE.AdditiveBlending,
-    side:        THREE.DoubleSide,
-  }), [])
-
-  useFrame(({ camera }) => {
-    if (meshRef.current) meshRef.current.quaternion.copy(camera.quaternion)
-  })
-
-  return (
-    <mesh ref={meshRef} material={material}>
-      <planeGeometry args={[3.0, 3.0]} />
-    </mesh>
-  )
-}
-
 // ─── Exported Avatar ──────────────────────────────────────────────────────────
 
 export function Avatar({ isSpeaking, isListening, isThinking, audioAmplitude, onClick }: AvatarProps) {
@@ -333,15 +293,14 @@ export function Avatar({ isSpeaking, isListening, isThinking, audioAmplitude, on
         audioAmplitude={audioAmplitude}
       />
       <OrbParticles isSpeaking={isSpeaking} isListening={isListening} />
-      <GlowBillboard />
 
       <EffectComposer>
         <Bloom
           mipmapBlur
-          luminanceThreshold={0.20}
-          luminanceSmoothing={0.85}
-          intensity={0.45}
-          radius={0.75}
+          luminanceThreshold={0.15}
+          luminanceSmoothing={0.9}
+          intensity={0.6}
+          radius={0.8}
         />
       </EffectComposer>
     </group>
