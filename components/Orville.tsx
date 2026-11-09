@@ -1098,7 +1098,15 @@ export function Orville() {
           </button>
         )}
 
-        {/* 3D Canvas — absolute so bloom can reach full column without hard cutoff */}
+        {/* CSS ambient glow — fades to transparent with no hard edge */}
+        <div
+          className="absolute inset-0 z-0 pointer-events-none"
+          style={{
+            background: 'radial-gradient(ellipse 60% 50% at 50% 48%, rgba(80,30,200,0.28) 0%, rgba(40,10,140,0.10) 45%, transparent 72%)',
+          }}
+        />
+
+        {/* 3D Canvas — absolute so it covers the full column */}
         <div className="absolute inset-0 z-0">
           <Canvas
             camera={{ position: [0, 0, 5], fov: 30 }}
