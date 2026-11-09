@@ -2,7 +2,6 @@
 
 import { useRef, useMemo } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { EffectComposer, Bloom } from '@react-three/postprocessing'
 import * as THREE from 'three'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -294,15 +293,6 @@ export function Avatar({ isSpeaking, isListening, isThinking, audioAmplitude, on
       />
       <OrbParticles isSpeaking={isSpeaking} isListening={isListening} />
 
-      <EffectComposer>
-        <Bloom
-          mipmapBlur
-          luminanceThreshold={0.15}
-          luminanceSmoothing={0.9}
-          intensity={0.6}
-          radius={0.8}
-        />
-      </EffectComposer>
     </group>
   )
 }
