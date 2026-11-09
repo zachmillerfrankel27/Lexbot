@@ -8,12 +8,12 @@ const STEPS = [
   {
     label: 'Welcome',
     title: 'Meet Orville',
-    body: 'Your AI law tutor. Voice-first, Socratic, and built for the way law school actually works — case analysis, exam prep, and the kind of deep thinking your professors expect.',
+    body: 'Your AI law tutor. Voice-first, Socratic, and built for the way law school actually works: case analysis, exam prep, and the kind of deep thinking your professors expect.',
   },
   {
     label: 'How it works',
     title: 'Click to Speak',
-    body: "Tap Orville to activate your microphone. Speak naturally — just like office hours. Orville listens, thinks, then responds out loud. You can also read the transcript at any time.",
+    body: "Tap Orville to activate your microphone and speak naturally. Orville listens… You can also read a transcript of your conversation, including any hypos Orville generates.",
   },
   {
     label: 'Modes',
@@ -25,18 +25,18 @@ const STEPS = [
       },
       {
         name: 'Socratic',
-        desc: "Orville leads with questions. You derive the rule yourself — just like getting cold-called in class.",
+        desc: "You derive the rule yourself, just like getting cold-called in class.",
       },
       {
         name: 'Exam Prep',
-        desc: 'Orville generates a fact pattern, you spot issues and write your IRAC answer, then Orville grades it.',
+        desc: 'Orville gives you a fact pattern and you spot the issues. You can talk through the facts or just write your answer, then Orville grades it.',
       },
     ],
     footer: 'Switch modes anytime from the bottom of the screen.',
   },
   {
     label: 'Before You Begin',
-    title: 'A Few Things',
+    title: 'Our AI Policy',
     body: "Orville is an AI tutor. He's smart — really smart — but can sometimes make mistakes. He has reliable, high-quality legal training, but you should still feel free to verify doctrine with your casebook, professor, or TAs. If Orville makes a mistake, please let us know so we can send him to office hours. Nothing Orville says constitutes legal advice.\n\nMost importantly, know that we will NEVER use your voice or identifiable information to train Orville. Your voice is transcribed in real time by your browser and is never recorded, stored, or used to train any AI model. Your conversations are processed by Anthropic's Claude AI to generate responses and by ElevenLabs to produce Orville's voice, under their respective privacy policies, which don't make us act as training data sources. Nothing is stored on our servers or sold to third parties. Your voice is yours, nobody else's.",
     footer: 'By continuing you agree to our Privacy Policy.',
   },
@@ -72,7 +72,7 @@ export function Walkthrough({ onDone }: WalkthroughProps) {
         opacity: visible ? 1 : 0,
       }}
     >
-      <div className="flex flex-col items-center gap-8 px-8 py-10 max-w-md w-full">
+      <div className={`flex flex-col items-center gap-8 py-10 w-full ${isLast ? 'max-w-lg px-5' : 'max-w-md px-8'}`}>
 
         {/* Step indicators */}
         <div className="flex gap-2">
@@ -155,7 +155,7 @@ export function Walkthrough({ onDone }: WalkthroughProps) {
               onClick={finish}
               className="font-sans px-8 py-3 text-xs tracking-widest uppercase border border-yellow-700 text-yellow-500 hover:border-yellow-500 hover:text-yellow-300 rounded transition-colors duration-200"
             >
-              Let's Begin
+              Let's Get Started
             </button>
           ) : (
             <button

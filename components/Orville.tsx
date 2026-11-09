@@ -15,7 +15,7 @@ type ExamStep = 'topic' | 'factpattern' | 'issuespotting' | 'writtenanswer' | 'g
 type Message = { role: 'user' | 'assistant'; content: string }
 
 // Words that should never be accepted as a user's name
-const NON_NAMES = new Set(['i', 'a', 'an', 'the', 'my', 'is', 'am', 'are', 'its', 'it', 'there', 'name', 'what', 'hi', 'hey', 'hello', 'just', 'uh', 'um'])
+const NON_NAMES = new Set(['i', 'a', 'an', 'the', 'my', 'is', 'am', 'are', 'its', 'it', 'there', 'name', 'what', 'hi', 'hey', 'hello', 'just', 'uh', 'um', 'orville', 'tutor', 'law', 'your', 'you', 'yours'])
 
 // ─── Theme — edit this object to rebrand the entire interface ─────────────────
 
@@ -228,6 +228,7 @@ export function Orville() {
   const sessionStartRef = useRef<{ mode: Mode; start: number; topic?: string } | null>(null)
   const userYearRef = useRef(userYear)
   const userCoursesRef = useRef<string[]>(userCourses)
+  const listenStartTimeRef = useRef(0)
 
   // Keep refs in sync
   useEffect(() => { statusRef.current = status }, [status])
@@ -414,7 +415,7 @@ export function Orville() {
       }
 
       // Echo-clearing pause — still in 'speaking' state visually
-      await new Promise((r) => setTimeout(r, 800))
+      await new Promise((r) => setTimeout(r, 1200))
     } finally {
       // Always release the lock and reset status, even if an error occurred
       isSpeakingRef.current = false
@@ -521,7 +522,12 @@ export function Orville() {
     (transcript: string) => {
       // ── Initialization phases ──────────────────────────────────────────────
       if (appPhaseRef.current === 'awaiting_name') {
-        // Ignore very short results — likely mic echo or ambient noise from TTS playback
+        // Ignore transcripts that arrive within 1.5s of the mic opening — TTS echo
+        if (Date.now() - listenStartTimeRef.current < 1500) {
+          startListeningRef.current()
+          return
+        }
+        // Ignore very short results — likely ambient noise
         if (transcript.trim().length < 2) {
           startListeningRef.current()
           return
@@ -800,6 +806,7 @@ export function Orville() {
       recognitionRef.current = null
     }
     try {
+      listenStartTimeRef.current = Date.now()
       recognition.start()
       recognitionRef.current = recognition
     } catch (err) {
@@ -1061,8 +1068,8 @@ export function Orville() {
         {/* Title + mode indicator */}
         <div className="absolute top-6 left-0 right-0 flex flex-col items-center z-30 pointer-events-none">
           <h1
-            className="text-2xl uppercase font-light text-gray-400"
-            style={{ fontFamily: "'Cinzel', Georgia, serif", letterSpacing: '0.35em' }}
+            className="font-sans text-2xl uppercase font-light text-gray-400"
+            style={{ letterSpacing: '0.35em' }}
           >
             ORVILLE
           </h1>
