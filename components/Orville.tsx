@@ -1098,8 +1098,8 @@ export function Orville() {
           </button>
         )}
 
-        {/* 3D Canvas */}
-        <div className="w-full flex-1 relative">
+        {/* 3D Canvas — absolute so bloom can reach full column without hard cutoff */}
+        <div className="absolute inset-0 z-0">
           <Canvas
             camera={{ position: [0, 0, 5], fov: 30 }}
             gl={{ antialias: true, alpha: true }}
@@ -1140,8 +1140,11 @@ export function Orville() {
           </Canvas>
         </div>
 
+        {/* Spacer — pushes bottom UI down; canvas is absolute so it needs this */}
+        <div className="flex-1" aria-hidden />
+
       {/* Bottom UI */}
-      <div className="pb-4 flex flex-col items-center gap-3 z-10 w-full px-4">
+      <div className="relative pb-4 flex flex-col items-center gap-3 z-10 w-full px-4">
 
         {/* Exam Prep step indicator */}
         {mode === 'examprep' && (
