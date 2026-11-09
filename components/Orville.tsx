@@ -1102,7 +1102,7 @@ export function Orville() {
         <div
           className="absolute inset-0 z-0 pointer-events-none"
           style={{
-            background: 'radial-gradient(ellipse 60% 50% at 50% 48%, rgba(80,30,200,0.28) 0%, rgba(40,10,140,0.10) 45%, transparent 72%)',
+            background: 'radial-gradient(ellipse 60% 50% at 50% 48%, rgba(80,30,200,0.52) 0%, rgba(40,10,140,0.18) 45%, transparent 72%)',
           }}
         />
 
