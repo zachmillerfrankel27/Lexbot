@@ -292,9 +292,9 @@ const GLOW_FRAG = /* glsl */`
 varying vec2 vUv;
 void main(){
   float d = length(vUv - 0.5) * 2.0;
-  float g = exp(-d * d * 0.9) * smoothstep(1.0, 0.0, d);
+  float g = exp(-d * d * 2.8) * smoothstep(1.0, 0.6, d);
   vec3 col = mix(vec3(0.18, 0.44, 1.00), vec3(0.42, 0.10, 0.90), pow(d, 0.5));
-  gl_FragColor = vec4(col * g, g * 0.55);
+  gl_FragColor = vec4(col * g, g * 0.40);
 }
 `
 
@@ -316,7 +316,7 @@ function GlowBillboard() {
 
   return (
     <mesh ref={meshRef} material={material}>
-      <planeGeometry args={[1.6, 1.6]} />
+      <planeGeometry args={[5.0, 5.0]} />
     </mesh>
   )
 }
