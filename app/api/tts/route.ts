@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
       const errText = await response.text()
       console.error('ElevenLabs error:', response.status, errText)
       return NextResponse.json(
-        { error: 'ElevenLabs request failed' },
+        { error: 'ElevenLabs request failed', status: response.status, detail: errText },
         { status: 502 }
       )
     }
